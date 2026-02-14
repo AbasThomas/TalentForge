@@ -7,10 +7,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PreDestroy;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -19,6 +24,7 @@ public class OllamaAiAssistantService implements AiAssistantService {
 
     private final ChatClient.Builder chatClientBuilder;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExecutorService aiExecutor = Executors.newCachedThreadPool();
 
     @Override
     public String checkJobBias(String title, String description, String requirements) {
@@ -87,11 +93,18 @@ public class OllamaAiAssistantService implements AiAssistantService {
     }
 
     private String callAi(String prompt) {
-        return chatClientBuilder.build()
+        Future<String> future = aiExecutor.submit(() -> chatClientBuilder.build()
                 .prompt()
                 .user(prompt)
                 .call()
-                .content();
+                .content());
+
+        try {
+            return future.get(12, TimeUnit.SECONDS);
+        } catch (Exception ex) {
+            future.cancel(true);
+            throw new RuntimeException("AI call timed out or failed", ex);
+        }
     }
 
     private AiResumeScoreResult fallbackScore(String jobText, String resumeText) {
@@ -112,5 +125,10 @@ public class OllamaAiAssistantService implements AiAssistantService {
         String reason = "Fallback scoring used due to AI parsing failure. Matched " + matched.size() + " key terms.";
 
         return new AiResumeScoreResult(Math.round(score * 10.0) / 10.0, reason, matching);
+    }
+
+    @PreDestroy
+    public void shutdownExecutor() {
+        aiExecutor.shutdownNow();
     }
 }

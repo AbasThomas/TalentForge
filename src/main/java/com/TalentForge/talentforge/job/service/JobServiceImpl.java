@@ -12,11 +12,13 @@ import com.TalentForge.talentforge.user.entity.User;
 import com.TalentForge.talentforge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class JobServiceImpl implements JobService {
 
     private final JobRepository jobRepository;
