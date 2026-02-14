@@ -1,176 +1,173 @@
-# TalentForge Frontend Page Blueprint
+# TalentForge Frontend Page Blueprint (Backend Aligned)
 
-This document lists all frontend pages the TalentForge web app should have.
+This page list was aligned to backend controllers under `src/main/java/com/TalentForge/talentforge/**/controller`.
+Each page includes core features that are directly supported by current APIs.
 
-## 1. Public Pages (No Login Required)
+## 1. Public / Auth Pages
 
-1. `/` - Landing Page
-- Product pitch, key features, pricing highlights, CTA buttons (`Get Started`, `Login`)
+1. `/`
+- Product overview, role-based CTAs, and links to auth pages.
 
-2. `/features`
-- Full feature breakdown (AI scoring, bias detection, social export, dashboards)
+2. `/login`
+- Email/password login form.
+- Stores JWT/session and redirects by user role.
+- API: `POST /api/v1/auth/login`.
 
-3. `/pricing`
-- Plan cards (Free, Starter, Pro, Enterprise), monthly/annual toggle
+3. `/register`
+- User registration with role selection (`CANDIDATE`, `RECRUITER`, `ADMIN`) and profile basics.
+- API: `POST /api/v1/auth/register`.
 
-4. `/about`
-- Company story, mission, privacy-first messaging
-
-5. `/contact`
-- Contact form + support email/social links
-
-6. `/login`
-- Email/password login
-
-7. `/register`
-- Recruiter/Candidate/Admin registration flow (or role selection)
-
-8. `/forgot-password`
-- Request password reset link
-
-9. `/reset-password`
-- Set new password with token
+4. `/403`, `/404`, `/500`
+- Standard auth/route/error fallback pages.
 
 ## 2. Shared Authenticated Pages
 
 1. `/dashboard`
-- Role-aware redirect shell:
-- Candidate -> candidate dashboard
-- Recruiter -> recruiter dashboard
-- Admin -> admin dashboard
+- Role-aware router shell:
+- Candidate -> `/candidate/dashboard`
+- Recruiter -> `/recruiter/dashboard`
+- Admin -> `/admin/dashboard`
 
 2. `/profile`
-- Profile details, password change, phone/company update
+- Read current user profile (email, full name, role, company, phone, active flag).
+- API: `GET /api/v1/users/{id}`.
 
-3. `/notifications`
-- Alerts (application updates, interview schedules, system notices)
-
-4. `/settings`
-- Preferences, timezone, email notifications, AI settings (if role allows)
+3. `/chat`
+- Shared chat entry page that can redirect to role-specific chat pages.
+- Supports conversation and history retrieval.
+- APIs: `POST /api/v1/chat`, `GET /api/v1/chat/{userId}`.
 
 ## 3. Recruiter Pages
 
 1. `/recruiter/dashboard`
-- KPI cards, open jobs, application funnel, quick actions
+- Summary cards from recruiter jobs/applications.
+- Quick links to open jobs, active applications, interviews, and subscription.
+- APIs typically consumed: `GET /api/v1/jobs?recruiterId={id}`, `GET /api/v1/applications?jobId={id}`.
 
 2. `/recruiter/jobs`
-- List/search/filter recruiter jobs
+- List recruiter-owned jobs with status chips (`DRAFT`, `OPEN`, `CLOSED`, `ARCHIVED`).
+- Create/edit/delete actions.
+- APIs: `GET /api/v1/jobs?recruiterId={id}`, `POST /api/v1/jobs`, `PUT /api/v1/jobs/{id}`, `DELETE /api/v1/jobs/{id}`.
 
 3. `/recruiter/jobs/new`
-- Create job page (calls bias-check before/while saving)
+- Job creation form (title, description, requirements, location, department, salary range, type, experience, closing date).
+- Shows backend-generated bias-check result after submit.
+- API: `POST /api/v1/jobs`.
 
 4. `/recruiter/jobs/:jobId/edit`
-- Edit existing job
+- Edit existing job and re-run bias check on save.
+- API: `PUT /api/v1/jobs/{id}`.
 
 5. `/recruiter/jobs/:jobId`
-- Job details, linked applications, status controls
+- Job details view with recruiter info, status, closing date, and bias check result.
+- Linked applications list for that job.
+- APIs: `GET /api/v1/jobs/{id}`, `GET /api/v1/applications?jobId={jobId}`.
 
 6. `/recruiter/applications`
-- All applications table with filters (status, AI score, date, job)
+- Application list filtered by selected job(s).
+- Shows AI score, AI reason, keywords, status, and timestamps.
+- API: `GET /api/v1/applications?jobId={jobId}`.
 
 7. `/recruiter/applications/:applicationId`
-- Application detail: resume, AI score, notes, status pipeline
+- Detailed candidate application view with resume metadata/path, cover letter, and AI scoring block.
+- Status pipeline actions (`APPLIED`, `REVIEWING`, `SHORTLISTED`, `INTERVIEWED`, `OFFERED`, `REJECTED`, `HIRED`, `WITHDRAWN`).
+- APIs: `GET /api/v1/applications/{id}`, `PATCH /api/v1/applications/{id}/status`.
 
-8. `/recruiter/interviews`
-- Upcoming/completed interviews list
+8. `/recruiter/applications/:applicationId/notes`
+- Recruiter notes timeline (newest first) plus create-note form.
+- API: `GET /api/v1/notes/application/{applicationId}`, `POST /api/v1/notes`.
 
-9. `/recruiter/interviews/new`
-- Schedule interview
+9. `/recruiter/applications/:applicationId/interviews`
+- Interview list scoped to an application.
+- Create interview with schedule/type/link/status/feedback.
+- APIs: `GET /api/v1/interviews/application/{applicationId}`, `POST /api/v1/interviews`.
 
-10. `/recruiter/notes`
-- Optional consolidated notes page
+10. `/recruiter/subscription`
+- Current plan details (`FREE`, `BASIC`, `PRO`, `ENTERPRISE`), limits, active flag, payment reference.
+- Update plan and limits.
+- APIs: `GET /api/v1/subscriptions/user/{userId}`, `POST /api/v1/subscriptions`.
 
-11. `/recruiter/subscription`
-- Current plan, limits, billing status, upgrade CTA
+11. `/recruiter/chat-assistant`
+- AI assistant chat composer + message history.
+- APIs: `POST /api/v1/chat`, `GET /api/v1/chat/{userId}`.
 
-12. `/recruiter/chat-assistant`
-- In-app AI assistant/chat history
-
-13. `/recruiter/analytics`
-- Hiring metrics, score distribution, time-to-hire charts
+12. `/recruiter/candidates`
+- Candidate pool list sourced from applicants.
+- APIs: `GET /api/v1/applicants`, `GET /api/v1/applicants/{id}`.
 
 ## 4. Candidate Pages
 
 1. `/candidate/dashboard`
-- Active applications, statuses, interview reminders
+- Snapshot of submitted applications and interview status by application.
+- APIs: `GET /api/v1/applications?applicantId={id}`, `GET /api/v1/interviews/application/{applicationId}`.
 
 2. `/candidate/jobs`
-- Browse/search available jobs
+- Browse all jobs with key metadata (department, location, type, experience, status).
+- API: `GET /api/v1/jobs`.
 
 3. `/candidate/jobs/:jobId`
-- Job details and apply flow
+- Job details and apply workflow with cover letter + optional resume upload.
+- Application submit includes backend resume parsing + AI score generation.
+- APIs: `GET /api/v1/jobs/{id}`, `POST /api/v1/applications` (multipart form).
 
 4. `/candidate/applications`
-- Candidate’s submitted applications
+- Candidate application history with status and AI score preview.
+- API: `GET /api/v1/applications?applicantId={applicantId}`.
 
 5. `/candidate/applications/:applicationId`
-- Application status timeline and feedback (when available)
+- Single application timeline/details with status and interview/notes references.
+- API: `GET /api/v1/applications/{id}`.
 
-6. `/candidate/resume`
-- Resume upload/manage (if supported as profile asset)
+6. `/candidate/applications/:applicationId/interviews`
+- Candidate-facing interview schedule/details per application.
+- API: `GET /api/v1/interviews/application/{applicationId}`.
 
-7. `/candidate/chat-assistant`
-- Candidate support chatbot
+7. `/candidate/profile`
+- Applicant profile management: full name, email, phone, location, LinkedIn, portfolio, summary, skills, years of experience.
+- APIs: `POST /api/v1/applicants`, `PUT /api/v1/applicants/{id}`, `GET /api/v1/applicants/{id}`.
+
+8. `/candidate/chat-assistant`
+- Candidate AI assistant with chat history.
+- APIs: `POST /api/v1/chat`, `GET /api/v1/chat/{userId}`.
 
 ## 5. Admin Pages
 
 1. `/admin/dashboard`
-- Global platform KPIs (users, jobs, active plans, usage)
+- Global totals and activity overview from users/jobs/applicants.
+- APIs: `GET /api/v1/users`, `GET /api/v1/jobs`, `GET /api/v1/applicants`.
 
 2. `/admin/users`
-- Manage all users (search, activate/deactivate, roles)
+- User table with role, company, phone, active state.
+- Includes deactivate action.
+- APIs: `GET /api/v1/users`, `POST /api/v1/users/{id}/deactivate`.
 
-3. `/admin/users/:userId`
-- User detail and account actions
+3. `/admin/users/new`
+- Admin-only create user form.
+- API: `POST /api/v1/users`.
 
-4. `/admin/jobs`
-- View/moderate all jobs
+4. `/admin/users/:userId`
+- User detail page with account state and metadata.
+- API: `GET /api/v1/users/{id}`.
 
-5. `/admin/applications`
-- Global applications oversight
+5. `/admin/jobs`
+- Cross-platform job moderation/listing with access to job detail.
+- APIs: `GET /api/v1/jobs`, `GET /api/v1/jobs/{id}`.
 
-6. `/admin/subscriptions`
-- Plan assignments, billing references, limits
+6. `/admin/applicants`
+- Cross-platform applicant directory and profile inspection.
+- APIs: `GET /api/v1/applicants`, `GET /api/v1/applicants/{id}`.
 
-7. `/admin/analytics`
-- Business metrics + system usage reports
+7. `/admin/subscriptions`
+- Subscription administration with plan/limits/payment reference management.
+- APIs: `GET /api/v1/subscriptions/user/{userId}`, `POST /api/v1/subscriptions`.
 
-8. `/admin/system-settings`
-- Global app settings, feature toggles, AI model defaults
+## 6. Planned But Not Yet Backed By Current Backend
 
-## 6. Utility / System Pages
+1. `/forgot-password`
+- Password reset request flow.
 
-1. `/403`
-- Forbidden page
+2. `/reset-password`
+- Token-based password reset form.
 
-2. `/404`
-- Not found page
-
-3. `/500`
-- Server error page
-
-4. `/maintenance`
-- Optional maintenance mode page
-
-## 7. Suggested Navigation Structure
-
-1. Public Navbar
-- Home, Features, Pricing, About, Contact, Login, Sign Up
-
-2. Recruiter Sidebar
-- Dashboard, Jobs, Applications, Interviews, Analytics, Subscription, Chat Assistant, Settings
-
-3. Candidate Sidebar
-- Dashboard, Jobs, Applications, Resume, Chat Assistant, Settings
-
-4. Admin Sidebar
-- Dashboard, Users, Jobs, Applications, Subscriptions, Analytics, System Settings
-
-## 8. MVP Priority (Build First)
-
-1. Auth (`/login`, `/register`)
-2. Recruiter core (`/recruiter/jobs`, `/recruiter/jobs/new`, `/recruiter/applications`, `/recruiter/applications/:id`)
-3. Candidate core (`/candidate/jobs`, `/candidate/applications`)
-4. Shared (`/profile`, `/settings`)
-5. Admin lite (`/admin/users`, `/admin/subscriptions`)
-
+3. `/features`, `/pricing`, `/about`, `/contact`
+- Marketing pages (no backend dependency required).
