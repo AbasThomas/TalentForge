@@ -32,5 +32,10 @@ build/
 ### VS Code ###
 .vscode/
 
+### Env ###
+.env
+.env.*
+!.env.example
+
 ### JTE ###
 /jte-classes/
