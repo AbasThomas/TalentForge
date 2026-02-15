@@ -21,6 +21,7 @@ public class ApplicationMapper {
                 application.getAiScore(),
                 application.getAiScoreReason(),
                 application.getMatchingKeywords(),
+                application.getProcessingLogs(),
                 application.getCoverLetter(),
                 application.getAppliedAt(),
                 application.getUpdatedAt(),

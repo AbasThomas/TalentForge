@@ -13,6 +13,8 @@ public record ApplicantResponse(
         String summary,
         String skills,
         Integer yearsOfExperience,
+        Double aiScore,
+        Object aiAnalysis,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

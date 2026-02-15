@@ -23,8 +23,10 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -73,6 +75,11 @@ public class Application {
 
     @Column(columnDefinition = "TEXT")
     private String matchingKeywords;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private List<String> processingLogs = new ArrayList<>();
 
     @Column(columnDefinition = "TEXT")
     private String coverLetter;

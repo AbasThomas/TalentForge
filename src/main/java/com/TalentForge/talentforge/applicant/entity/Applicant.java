@@ -14,12 +14,16 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Setter
@@ -55,6 +59,13 @@ public class Applicant {
     private String skills;
 
     private Integer yearsOfExperience;
+
+    private Double aiScore;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> aiAnalysis = new LinkedHashMap<>();
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

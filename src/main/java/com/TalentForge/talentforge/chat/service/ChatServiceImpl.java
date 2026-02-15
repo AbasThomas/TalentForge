@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +30,12 @@ public class ChatServiceImpl implements ChatService {
                 .build();
         chatMessageRepository.save(userMessage);
 
-        String aiReply = aiAssistantService.generateChatReply(request.message());
+        String aiReply;
+        try {
+            aiReply = aiAssistantService.generateChatReply(request.message());
+        } catch (Exception ignored) {
+            aiReply = fallbackReply(request.message());
+        }
         ChatMessage botMessage = ChatMessage.builder()
                 .userId(request.userId())
                 .senderType(SenderType.BOT)
@@ -45,5 +51,20 @@ public class ChatServiceImpl implements ChatService {
                 .stream()
                 .map(chatMessageMapper::toResponse)
                 .toList();
+    }
+
+    private String fallbackReply(String message) {
+        String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
+
+        if (normalized.contains("status")) {
+            return "Use Applications > filter by job to check current candidate statuses and interview stage.";
+        }
+        if (normalized.contains("resume") || normalized.contains("score")) {
+            return "Resume AI scoring is available in each application detail under AI score, reasoning, and matched skills.";
+        }
+        if (normalized.contains("job") && normalized.contains("post")) {
+            return "Create a job from Recruiter > Jobs > New, then publish via Recruiter > Integrations.";
+        }
+        return "AI model is temporarily unavailable. You can still manage jobs, applications, and interview workflows now.";
     }
 }

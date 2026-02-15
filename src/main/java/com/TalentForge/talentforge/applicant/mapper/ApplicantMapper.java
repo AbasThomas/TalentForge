@@ -19,6 +19,8 @@ public class ApplicantMapper {
                 applicant.getSummary(),
                 applicant.getSkills(),
                 applicant.getYearsOfExperience(),
+                applicant.getAiScore(),
+                applicant.getAiAnalysis(),
                 applicant.getCreatedAt(),
                 applicant.getUpdatedAt()
         );

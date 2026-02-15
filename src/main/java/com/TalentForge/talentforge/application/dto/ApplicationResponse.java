@@ -3,6 +3,7 @@ package com.TalentForge.talentforge.application.dto;
 import com.TalentForge.talentforge.application.entity.ApplicationStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record ApplicationResponse(
         Long id,
@@ -17,6 +18,7 @@ public record ApplicationResponse(
         Double aiScore,
         String aiScoreReason,
         String matchingKeywords,
+        List<String> processingLogs,
         String coverLetter,
         LocalDateTime appliedAt,
         LocalDateTime updatedAt,

@@ -56,8 +56,8 @@ public class OllamaAiAssistantService implements AiAssistantService {
                     Return ONLY valid JSON in this shape:
                     {
                       "score": 0,
-                      "reason": "short reason",
-                      "matchingKeywords": "comma,separated,keywords"
+                      "skills": "comma,separated,skills",
+                      "reasoning": "short explanation"
                     }
 
                     JOB DESCRIPTION:
@@ -68,10 +68,10 @@ public class OllamaAiAssistantService implements AiAssistantService {
                     """.formatted(jobText, resumeText);
 
             String raw = callAi(prompt);
-            JsonNode node = objectMapper.readTree(raw);
+            JsonNode node = objectMapper.readTree(extractJsonBody(raw));
             double score = node.path("score").asDouble(0);
-            String reason = node.path("reason").asText("No reason returned");
-            String matchingKeywords = node.path("matchingKeywords").asText("");
+            String reason = node.path("reasoning").asText(node.path("reason").asText("No reason returned"));
+            String matchingKeywords = node.path("skills").asText(node.path("matchingKeywords").asText(""));
             return new AiResumeScoreResult(Math.max(0, Math.min(100, score)), reason, matchingKeywords);
         } catch (Exception ex) {
             return fallbackScore(jobText, resumeText);
@@ -128,6 +128,22 @@ public class OllamaAiAssistantService implements AiAssistantService {
         String reason = "Fallback scoring used due to AI parsing failure. Matched " + matched.size() + " key terms.";
 
         return new AiResumeScoreResult(Math.round(score * 10.0) / 10.0, reason, matching);
+    }
+
+    private String extractJsonBody(String rawResponse) {
+        if (rawResponse == null) {
+            return "{}";
+        }
+
+        String trimmed = rawResponse.trim();
+        if (trimmed.startsWith("```")) {
+            int firstNewline = trimmed.indexOf('\n');
+            int lastFence = trimmed.lastIndexOf("```");
+            if (firstNewline > -1 && lastFence > firstNewline) {
+                return trimmed.substring(firstNewline + 1, lastFence).trim();
+            }
+        }
+        return trimmed;
     }
 
     @PreDestroy
