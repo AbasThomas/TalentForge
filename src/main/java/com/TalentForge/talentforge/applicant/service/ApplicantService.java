@@ -1,7 +1,10 @@
 package com.TalentForge.talentforge.applicant.service;
 
 import com.TalentForge.talentforge.applicant.dto.ApplicantRequest;
+import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreRequest;
+import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -15,4 +18,6 @@ public interface ApplicantService {
     List<ApplicantResponse> getAll();
 
     void delete(Long id);
+
+    ApplicantResumeScoreResponse scoreResume(String userEmail, ApplicantResumeScoreRequest request, MultipartFile resumeFile);
 }

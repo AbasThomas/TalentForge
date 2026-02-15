@@ -240,8 +240,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         appendSection(builder, "Description", job.getDescription());
         appendSection(builder, "Requirements", job.getRequirements());
         appendSection(builder, "Department", job.getDepartment());
-        appendSection(builder, "Experience Level", job.getExperienceLevel());
-        appendSection(builder, "Job Type", job.getJobType());
+        appendSection(builder, "Experience Level", job.getExperienceLevel() == null ? null : job.getExperienceLevel().name());
+        appendSection(builder, "Job Type", job.getJobType() == null ? null : job.getJobType().name());
         return truncate(builder.toString(), MAX_CANDIDATE_TEXT_CHARS);
     }
 

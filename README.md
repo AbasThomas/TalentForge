@@ -81,6 +81,7 @@ Base path: `/api/v1`
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/applicants` | Any authenticated | Create applicant |
+| POST | `/applicants/resume-score` | Any authenticated | Parse uploaded resume and return Talentforge AI score |
 | PUT | `/applicants/{id}` | Any authenticated | Update applicant |
 | GET | `/applicants` | Any authenticated | List applicants |
 | GET | `/applicants/{id}` | Any authenticated | Get applicant by id |

@@ -1,20 +1,27 @@
 package com.TalentForge.talentforge.applicant.controller;
 
 import com.TalentForge.talentforge.applicant.dto.ApplicantRequest;
+import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreRequest;
+import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResponse;
 import com.TalentForge.talentforge.applicant.service.ApplicantService;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -31,6 +38,19 @@ public class ApplicantController {
                 .success(true)
                 .message("Applicant created")
                 .data(applicantService.create(request))
+                .build());
+    }
+
+    @PostMapping(value = "/resume-score", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ApplicantResumeScoreResponse>> scoreResume(
+            @ModelAttribute ApplicantResumeScoreRequest request,
+            @RequestPart("resumeFile") MultipartFile resumeFile,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.<ApplicantResumeScoreResponse>builder()
+                .success(true)
+                .message("Resume scored")
+                .data(applicantService.scoreResume(authentication.getName(), request, resumeFile))
                 .build());
     }
 
