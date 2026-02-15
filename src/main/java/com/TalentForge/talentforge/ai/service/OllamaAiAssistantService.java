@@ -1,6 +1,7 @@
 package com.TalentForge.talentforge.ai.service;
 
 import com.TalentForge.talentforge.ai.dto.AiResumeScoreResult;
+import com.TalentForge.talentforge.common.exception.AiServiceUnavailableException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -88,7 +89,9 @@ public class OllamaAiAssistantService implements AiAssistantService {
         try {
             return callAi(prompt);
         } catch (Exception ex) {
-            return "I can help with job applications, status updates, and hiring questions. AI response is temporarily unavailable.";
+            throw new AiServiceUnavailableException(
+                    "AI service unavailable. Verify Ollama is running and the configured model is loaded."
+            );
         }
     }
 

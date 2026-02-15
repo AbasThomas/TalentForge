@@ -26,6 +26,12 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.builder().success(false).message(ex.getMessage()).data(null).build());
     }
 
+    @ExceptionHandler(AiServiceUnavailableException.class)
+    public ResponseEntity<ApiResponse<Object>> handleAiUnavailable(AiServiceUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.builder().success(false).message(ex.getMessage()).data(null).build());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
