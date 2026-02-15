@@ -58,7 +58,7 @@ public class RecruiterIntegration {
     private boolean connected = true;
 
     @CreationTimestamp
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     private LocalDateTime connectedAt;
 
     @UpdateTimestamp

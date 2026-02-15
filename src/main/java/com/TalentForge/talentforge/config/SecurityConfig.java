@@ -46,6 +46,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/rescore").hasAnyRole("RECRUITER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/subscriptions/**").hasAnyRole("ADMIN", "RECRUITER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/interviews/**").hasAnyRole("RECRUITER", "ADMIN")
+                        .requestMatchers("/api/v1/integrations/**").hasAnyRole("RECRUITER", "ADMIN")
                         .anyRequest().authenticated()
                 );
 
