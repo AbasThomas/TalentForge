@@ -77,7 +77,7 @@ public class Application {
     private String matchingKeywords;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
+    @Column(columnDefinition = "jsonb", nullable = false)
     @Builder.Default
     private List<String> processingLogs = new ArrayList<>();
 

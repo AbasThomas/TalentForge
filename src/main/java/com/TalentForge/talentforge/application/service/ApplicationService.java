@@ -10,6 +10,8 @@ import java.util.List;
 public interface ApplicationService {
     ApplicationResponse submit(ApplicationCreateRequest request, MultipartFile resumeFile);
 
+    ApplicationResponse rescore(Long id);
+
     ApplicationResponse updateStatus(Long id, ApplicationStatus status);
 
     ApplicationResponse getById(Long id);

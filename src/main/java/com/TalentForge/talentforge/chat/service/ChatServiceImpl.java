@@ -8,12 +8,14 @@ import com.TalentForge.talentforge.chat.entity.SenderType;
 import com.TalentForge.talentforge.chat.mapper.ChatMessageMapper;
 import com.TalentForge.talentforge.chat.repository.ChatMessageRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Locale;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
 
@@ -33,7 +35,8 @@ public class ChatServiceImpl implements ChatService {
         String aiReply;
         try {
             aiReply = aiAssistantService.generateChatReply(request.message());
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn("AI chat unavailable for userId={}. Falling back to deterministic reply.", request.userId(), ex);
             aiReply = fallbackReply(request.message());
         }
         ChatMessage botMessage = ChatMessage.builder()
@@ -55,16 +58,25 @@ public class ChatServiceImpl implements ChatService {
 
     private String fallbackReply(String message) {
         String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        if (normalized.contains("hello") || normalized.contains("hi")) {
+            return "The AI model is currently unavailable, but I can still help. Ask about posting jobs, reviewing applications, interview scheduling, or resume scores.";
+        }
+        if (normalized.contains("interview") || normalized.contains("schedule")) {
+            return "For interview workflow: open Applications, select a candidate, then use Advance to Interview to set date, format, and meeting link.";
+        }
+        if (normalized.contains("application") || normalized.contains("status")) {
+            return "Use Recruiter > Applications to filter by job, then update each candidate status (REVIEWING, SHORTLISTED, INTERVIEWED, OFFERED, REJECTED, HIRED).";
+        }
+        if (normalized.contains("resume") || normalized.contains("score") || normalized.contains("cv")) {
+            return "Resume scoring appears on each application detail with AI score, matched skills, and reasoning. Open a candidate record to review it.";
+        }
+        if (normalized.contains("job") || normalized.contains("post") || normalized.contains("publish")) {
+            return "Create jobs from Recruiter > Jobs > New. After saving, use Recruiter > Integrations to share the public job link.";
+        }
+        if (normalized.contains("candidate")) {
+            return "You can review candidates from Recruiter > Applications, then drill into one profile for resume, score, notes, and interview actions.";
+        }
 
-        if (normalized.contains("status")) {
-            return "Use Applications > filter by job to check current candidate statuses and interview stage.";
-        }
-        if (normalized.contains("resume") || normalized.contains("score")) {
-            return "Resume AI scoring is available in each application detail under AI score, reasoning, and matched skills.";
-        }
-        if (normalized.contains("job") && normalized.contains("post")) {
-            return "Create a job from Recruiter > Jobs > New, then publish via Recruiter > Integrations.";
-        }
-        return "AI model is temporarily unavailable. You can still manage jobs, applications, and interview workflows now.";
+        return "The AI model is currently unavailable. I can still guide product workflows. Try: 'how do I post a job', 'how do I shortlist candidates', or 'how do I schedule an interview'.";
     }
 }

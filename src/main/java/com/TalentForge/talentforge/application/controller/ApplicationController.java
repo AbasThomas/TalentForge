@@ -54,6 +54,15 @@ public class ApplicationController {
                 .build());
     }
 
+    @PostMapping("/{id}/rescore")
+    public ResponseEntity<ApiResponse<ApplicationResponse>> rescore(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.<ApplicationResponse>builder()
+                .success(true)
+                .message("Application AI score refreshed")
+                .data(applicationService.rescore(id))
+                .build());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ApplicationResponse>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.<ApplicationResponse>builder()

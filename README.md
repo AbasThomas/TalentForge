@@ -12,11 +12,16 @@ Spring Boot backend for TalentForge (ATS), with:
 docker compose up -d
 ```
 
-2. Configure environment:
+2. Ensure the Ollama model is available:
+```bash
+docker exec -it talentforge-ollama ollama pull llama3.2:latest
+```
+
+3. Configure environment:
 - Copy `.env.example` to `.env` (already supported by `spring.config.import`)
 - Update values if needed
 
-3. Start API:
+4. Start API:
 ```bash
 ./mvnw spring-boot:run
 ```
@@ -86,6 +91,7 @@ Base path: `/api/v1`
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/applications` | Any authenticated | Submit application (multipart, resume parsing + AI score) |
+| POST | `/applications/{id}/rescore` | RECRUITER, ADMIN | Re-run Talentforge AI scoring for an existing application |
 | PATCH | `/applications/{id}/status` | Any authenticated | Update application status |
 | GET | `/applications/{id}` | Any authenticated | Get application by id |
 | GET | `/applications` | Any authenticated | Filter by `?jobId=` or `?applicantId=` |
@@ -163,4 +169,3 @@ Latest run status (February 14, 2026):
 - `TOTAL=34`
 - `PASSED=34`
 - `FAILED=0`
-
