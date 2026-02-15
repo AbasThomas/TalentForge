@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**", "/error", "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/jobs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/jobs/**").hasAnyRole("RECRUITER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/jobs/**").hasAnyRole("RECRUITER", "ADMIN")
