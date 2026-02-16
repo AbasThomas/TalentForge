@@ -90,8 +90,11 @@ public class PaymentServiceImpl implements PaymentService {
     @Value("${app.paystack.base-url:https://api.paystack.co}")
     private String paystackBaseUrl;
 
-    @Value("${app.paystack.callback-url:http://localhost:3000/recruiter/subscription}")
+    @Value("${app.paystack.callback-url:}")
     private String paystackCallbackUrl;
+
+    @Value("${app.frontend.public-base-url:http://localhost:3000}")
+    private String frontendPublicBaseUrl;
 
     @Value("${app.paystack.channels:card,bank,ussd,qr,mobile_money,bank_transfer,eft}")
     private String paystackChannels;
@@ -115,22 +118,10 @@ public class PaymentServiceImpl implements PaymentService {
         List<PaymentCurrency> currencies = Arrays.asList(PaymentCurrency.values());
         List<PaymentOptionsResponse.PaymentPriceOption> prices = new ArrayList<>();
 
-        for (PlanType planType : PlanType.values()) {
+        for (PlanType planType : List.of(PlanType.BASIC, PlanType.PRO, PlanType.ENTERPRISE)) {
+            PlanLimits limits = resolvePlanLimits(planType);
             for (BillingCycle cycle : BillingCycle.values()) {
                 for (PaymentCurrency currency : PaymentCurrency.values()) {
-                    if (planType == PlanType.FREE) {
-                        prices.add(new PaymentOptionsResponse.PaymentPriceOption(
-                                planType,
-                                cycle,
-                                currency,
-                                0L,
-                                0L,
-                                true,
-                                "No payment required"
-                        ));
-                        continue;
-                    }
-
                     Long amountUsdMinor = resolveUsdMinorAmount(planType, cycle);
                     if (amountUsdMinor == null) {
                         prices.add(new PaymentOptionsResponse.PaymentPriceOption(
@@ -139,6 +130,10 @@ public class PaymentServiceImpl implements PaymentService {
                                 currency,
                                 0L,
                                 0L,
+                                limits.jobPostLimit(),
+                                limits.applicantLimit(),
+                                limits.applicationLimit(),
+                                limits.resumeScoreLimit(),
                                 false,
                                 "Custom quote required"
                         ));
@@ -151,6 +146,10 @@ public class PaymentServiceImpl implements PaymentService {
                             currency,
                             convertUsdMinor(amountUsdMinor, currency),
                             amountUsdMinor,
+                            limits.jobPostLimit(),
+                            limits.applicantLimit(),
+                            limits.applicationLimit(),
+                            limits.resumeScoreLimit(),
                             true,
                             "Paystack checkout"
                     ));
@@ -185,7 +184,7 @@ public class PaymentServiceImpl implements PaymentService {
         payload.put("amount", amountMinor);
         payload.put("currency", request.currency().name());
         payload.put("reference", reference);
-        payload.put("callback_url", paystackCallbackUrl);
+        payload.put("callback_url", resolveCallbackUrl(currentUser));
 
         ArrayNode channelArray = payload.putArray("channels");
         channels.forEach(channelArray::add);
@@ -379,6 +378,10 @@ public class PaymentServiceImpl implements PaymentService {
         subscription.setActive(true);
         subscription.setJobPostLimit(limits.jobPostLimit());
         subscription.setApplicantLimit(limits.applicantLimit());
+        subscription.setApplicationLimit(limits.applicationLimit());
+        subscription.setResumeScoreLimit(limits.resumeScoreLimit());
+        subscription.setApplicationUsed(0);
+        subscription.setResumeScoreUsed(0);
         subscription.setPaymentReference(transaction.getReference());
 
         subscriptionRepository.save(subscription);
@@ -386,12 +389,19 @@ public class PaymentServiceImpl implements PaymentService {
 
     private PlanLimits resolvePlanLimits(PlanType planType) {
         return switch (planType) {
-            case FREE -> new PlanLimits(3, 50);
-            case BASIC, PRO, ENTERPRISE -> new PlanLimits(null, null);
+            case FREE -> new PlanLimits(3, 50, 10, 20);
+            case BASIC -> new PlanLimits(15, 400, 35, 100);
+            case PRO -> new PlanLimits(75, 3000, 180, 500);
+            case ENTERPRISE -> new PlanLimits(null, null, null, null);
         };
     }
 
-    private record PlanLimits(Integer jobPostLimit, Integer applicantLimit) {
+    private record PlanLimits(
+            Integer jobPostLimit,
+            Integer applicantLimit,
+            Integer applicationLimit,
+            Integer resumeScoreLimit
+    ) {
     }
 
     private Long resolveUsdMinorAmount(PlanType planType, BillingCycle cycle) {
@@ -564,9 +574,22 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void assertPaymentAllowedRole(User user) {
-        if (user.getRole() != UserRole.RECRUITER && user.getRole() != UserRole.ADMIN) {
-            throw new AccessDeniedException("Payments are available only for recruiter and admin accounts");
+        if (user.getRole() != UserRole.RECRUITER && user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.CANDIDATE) {
+            throw new AccessDeniedException("Payments are available only for recruiter, candidate, and admin accounts");
         }
+    }
+
+    private String resolveCallbackUrl(User currentUser) {
+        if (!isBlank(paystackCallbackUrl)) {
+            return paystackCallbackUrl.trim();
+        }
+
+        String normalizedBase = (frontendPublicBaseUrl == null || frontendPublicBaseUrl.isBlank())
+                ? "http://localhost:3000"
+                : frontendPublicBaseUrl.replaceAll("/+$", "");
+
+        String path = currentUser.getRole() == UserRole.CANDIDATE ? "/candidate/subscription" : "/recruiter/subscription";
+        return normalizedBase + path;
     }
 
     private String generateReference() {

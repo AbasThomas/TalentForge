@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,12 +34,13 @@ public class ApplicationController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<ApplicationResponse>> submit(
             @Valid @ModelAttribute ApplicationCreateRequest request,
-            @RequestPart(value = "resumeFile", required = false) MultipartFile resumeFile
+            @RequestPart(value = "resumeFile", required = false) MultipartFile resumeFile,
+            Authentication authentication
     ) {
         return ResponseEntity.ok(ApiResponse.<ApplicationResponse>builder()
                 .success(true)
                 .message("Application submitted")
-                .data(applicationService.submit(request, resumeFile))
+                .data(applicationService.submit(request, resumeFile, authentication == null ? null : authentication.getName()))
                 .build());
     }
 

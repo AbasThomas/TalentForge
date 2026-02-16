@@ -1,0 +1,5 @@
+ALTER TABLE subscriptions
+    ADD COLUMN IF NOT EXISTS application_limit INTEGER,
+    ADD COLUMN IF NOT EXISTS resume_score_limit INTEGER,
+    ADD COLUMN IF NOT EXISTS application_used INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS resume_score_used INTEGER NOT NULL DEFAULT 0;

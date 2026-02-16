@@ -8,7 +8,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface ApplicationService {
-    ApplicationResponse submit(ApplicationCreateRequest request, MultipartFile resumeFile);
+    ApplicationResponse submit(ApplicationCreateRequest request, MultipartFile resumeFile, String userEmail);
 
     ApplicationResponse rescore(Long id);
 

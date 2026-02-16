@@ -12,6 +12,10 @@ public record SubscriptionRequest(
         LocalDateTime endDate,
         Integer jobPostLimit,
         Integer applicantLimit,
+        Integer applicationLimit,
+        Integer resumeScoreLimit,
+        Integer applicationUsed,
+        Integer resumeScoreUsed,
         String paymentReference,
         Boolean active
 ) {

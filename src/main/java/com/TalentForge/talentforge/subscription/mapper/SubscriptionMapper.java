@@ -18,6 +18,10 @@ public class SubscriptionMapper {
                 subscription.isActive(),
                 subscription.getJobPostLimit(),
                 subscription.getApplicantLimit(),
+                subscription.getApplicationLimit(),
+                subscription.getResumeScoreLimit(),
+                subscription.getApplicationUsed(),
+                subscription.getResumeScoreUsed(),
                 subscription.getPaymentReference(),
                 subscription.getCreatedAt()
         );

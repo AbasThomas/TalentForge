@@ -52,6 +52,18 @@ public class Subscription {
 
     private Integer applicantLimit;
 
+    private Integer applicationLimit;
+
+    private Integer resumeScoreLimit;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer applicationUsed = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer resumeScoreUsed = 0;
+
     private String paymentReference;
 
     @CreationTimestamp

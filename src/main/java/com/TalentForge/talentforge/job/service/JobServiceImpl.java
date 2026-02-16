@@ -8,6 +8,7 @@ import com.TalentForge.talentforge.job.entity.Job;
 import com.TalentForge.talentforge.job.entity.JobStatus;
 import com.TalentForge.talentforge.job.mapper.JobMapper;
 import com.TalentForge.talentforge.job.repository.JobRepository;
+import com.TalentForge.talentforge.subscription.service.SubscriptionLimitService;
 import com.TalentForge.talentforge.user.entity.User;
 import com.TalentForge.talentforge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,11 +26,13 @@ public class JobServiceImpl implements JobService {
     private final UserRepository userRepository;
     private final JobMapper jobMapper;
     private final AiAssistantService aiAssistantService;
+    private final SubscriptionLimitService subscriptionLimitService;
 
     @Override
     public JobResponse create(JobRequest request) {
         User recruiter = userRepository.findById(request.recruiterId())
                 .orElseThrow(() -> new ResourceNotFoundException("Recruiter not found: " + request.recruiterId()));
+        subscriptionLimitService.ensureRecruiterCanPostJob(recruiter.getId());
 
         Job job = Job.builder()
                 .title(request.title())

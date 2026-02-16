@@ -17,6 +17,10 @@ public record PaymentOptionsResponse(
             PaymentCurrency currency,
             Long amountMinor,
             Long amountUsdMinor,
+            Integer jobPostLimit,
+            Integer applicantLimit,
+            Integer applicationLimit,
+            Integer resumeScoreLimit,
             boolean enabled,
             String note
     ) {

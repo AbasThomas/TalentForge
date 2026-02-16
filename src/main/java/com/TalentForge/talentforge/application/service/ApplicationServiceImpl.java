@@ -15,6 +15,10 @@ import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
 import com.TalentForge.talentforge.job.entity.Job;
 import com.TalentForge.talentforge.job.repository.JobRepository;
+import com.TalentForge.talentforge.subscription.service.SubscriptionLimitService;
+import com.TalentForge.talentforge.user.entity.User;
+import com.TalentForge.talentforge.user.entity.UserRole;
+import com.TalentForge.talentforge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -48,9 +52,11 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ResumeStorageService resumeStorageService;
     private final ResumeParserService resumeParserService;
     private final AiAssistantService aiAssistantService;
+    private final UserRepository userRepository;
+    private final SubscriptionLimitService subscriptionLimitService;
 
     @Override
-    public ApplicationResponse submit(ApplicationCreateRequest request, MultipartFile resumeFile) {
+    public ApplicationResponse submit(ApplicationCreateRequest request, MultipartFile resumeFile, String userEmail) {
         List<String> processingLogs = new ArrayList<>();
         processingLogs.add(stageLog("RECEIVED", "Application payload received"));
 
@@ -71,6 +77,24 @@ public class ApplicationServiceImpl implements ApplicationService {
         Applicant applicant = applicantRepository.findById(request.getApplicantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Applicant not found: " + request.getApplicantId()));
         processingLogs.add(stageLog("APPLICANT_FETCHED", "Applicant loaded: " + applicant.getEmail()));
+
+        User currentUser = null;
+        if (userEmail != null && !userEmail.isBlank()) {
+            currentUser = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found: " + userEmail));
+        }
+
+        if (currentUser != null && currentUser.getRole() == UserRole.CANDIDATE) {
+            if (!currentUser.getEmail().equalsIgnoreCase(applicant.getEmail())) {
+                processingLogs.add(stageLog("VALIDATION_FAILED", "Candidate attempted submission for another applicant profile"));
+                throw new BadRequestException("Candidates can only submit applications for their own profile");
+            }
+            subscriptionLimitService.ensureCandidateCanSubmitApplication(currentUser);
+        }
+
+        if (job.getRecruiter() != null) {
+            subscriptionLimitService.ensureRecruiterCanReceiveApplicant(job.getRecruiter().getId());
+        }
 
         Application application = Application.builder()
                 .job(job)
@@ -108,7 +132,11 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         processingLogs.add(stageLog("SAVING", "Persisting application"));
         application.setProcessingLogs(processingLogs);
-        return applicationMapper.toResponse(applicationRepository.save(application));
+        ApplicationResponse response = applicationMapper.toResponse(applicationRepository.save(application));
+        if (currentUser != null && currentUser.getRole() == UserRole.CANDIDATE) {
+            subscriptionLimitService.incrementCandidateApplicationUsage(currentUser);
+        }
+        return response;
     }
 
     @Override

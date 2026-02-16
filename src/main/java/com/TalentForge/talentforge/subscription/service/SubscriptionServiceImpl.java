@@ -34,6 +34,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscription.setEndDate(request.endDate());
         subscription.setJobPostLimit(request.jobPostLimit());
         subscription.setApplicantLimit(request.applicantLimit());
+        subscription.setApplicationLimit(request.applicationLimit());
+        subscription.setResumeScoreLimit(request.resumeScoreLimit());
+        if (request.applicationUsed() != null) {
+            subscription.setApplicationUsed(request.applicationUsed());
+        } else if (subscription.getApplicationUsed() == null) {
+            subscription.setApplicationUsed(0);
+        }
+        if (request.resumeScoreUsed() != null) {
+            subscription.setResumeScoreUsed(request.resumeScoreUsed());
+        } else if (subscription.getResumeScoreUsed() == null) {
+            subscription.setResumeScoreUsed(0);
+        }
         subscription.setPaymentReference(request.paymentReference());
         subscription.setActive(request.active() == null || request.active());
 

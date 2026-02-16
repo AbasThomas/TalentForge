@@ -14,6 +14,10 @@ public record SubscriptionResponse(
         boolean active,
         Integer jobPostLimit,
         Integer applicantLimit,
+        Integer applicationLimit,
+        Integer resumeScoreLimit,
+        Integer applicationUsed,
+        Integer resumeScoreUsed,
         String paymentReference,
         LocalDateTime createdAt
 ) {

@@ -12,6 +12,10 @@ import com.TalentForge.talentforge.applicant.mapper.ApplicantMapper;
 import com.TalentForge.talentforge.applicant.repository.ApplicantRepository;
 import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
+import com.TalentForge.talentforge.subscription.service.SubscriptionLimitService;
+import com.TalentForge.talentforge.user.entity.User;
+import com.TalentForge.talentforge.user.entity.UserRole;
+import com.TalentForge.talentforge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,6 +39,8 @@ public class ApplicantServiceImpl implements ApplicantService {
     private final ApplicantMapper applicantMapper;
     private final ResumeParserService resumeParserService;
     private final AiAssistantService aiAssistantService;
+    private final UserRepository userRepository;
+    private final SubscriptionLimitService subscriptionLimitService;
 
     @Override
     public ApplicantResponse create(ApplicantRequest request) {
@@ -98,6 +104,11 @@ public class ApplicantServiceImpl implements ApplicantService {
         if (userEmail == null || userEmail.isBlank()) {
             throw new BadRequestException("Authenticated user email is required");
         }
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found: " + userEmail));
+        if (user.getRole() == UserRole.CANDIDATE) {
+            subscriptionLimitService.ensureCandidateCanScoreResume(user);
+        }
         if (resumeFile == null || resumeFile.isEmpty()) {
             throw new BadRequestException("resumeFile is required");
         }
@@ -148,6 +159,10 @@ public class ApplicantServiceImpl implements ApplicantService {
             applicant.setAiAnalysis(aiAnalysis);
             applicantRepository.save(applicant);
             processingLogs.add(stageLog("PROFILE_UPDATED", "Applicant ai_score and ai_analysis updated"));
+        }
+
+        if (user.getRole() == UserRole.CANDIDATE) {
+            subscriptionLimitService.incrementCandidateResumeScoreUsage(user);
         }
 
         return new ApplicantResumeScoreResponse(

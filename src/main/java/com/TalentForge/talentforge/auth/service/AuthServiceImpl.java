@@ -49,14 +49,23 @@ public class AuthServiceImpl implements AuthService {
 
         User saved = userRepository.save(user);
 
+        Integer freeJobPostLimit = (saved.getRole() == UserRole.RECRUITER || saved.getRole() == UserRole.ADMIN) ? 3 : null;
+        Integer freeApplicantLimit = (saved.getRole() == UserRole.RECRUITER || saved.getRole() == UserRole.ADMIN) ? 50 : null;
+        Integer freeApplicationLimit = saved.getRole() == UserRole.CANDIDATE ? 10 : null;
+        Integer freeResumeScoreLimit = saved.getRole() == UserRole.CANDIDATE ? 20 : null;
+
         Subscription subscription = Subscription.builder()
                 .user(saved)
                 .planType(PlanType.FREE)
                 .startDate(LocalDateTime.now())
                 .endDate(null)
                 .active(true)
-                .jobPostLimit(3)
-                .applicantLimit(50)
+                .jobPostLimit(freeJobPostLimit)
+                .applicantLimit(freeApplicantLimit)
+                .applicationLimit(freeApplicationLimit)
+                .resumeScoreLimit(freeResumeScoreLimit)
+                .applicationUsed(0)
+                .resumeScoreUsed(0)
                 .paymentReference("FREE_PLAN")
                 .build();
 
