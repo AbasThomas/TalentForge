@@ -3,10 +3,12 @@ package com.TalentForge.talentforge.subscription.controller;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import com.TalentForge.talentforge.subscription.dto.SubscriptionRequest;
 import com.TalentForge.talentforge.subscription.dto.SubscriptionResponse;
+import com.TalentForge.talentforge.subscription.dto.SubscriptionUsageResponse;
 import com.TalentForge.talentforge.subscription.service.SubscriptionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +38,15 @@ public class SubscriptionController {
                 .success(true)
                 .message("Subscription fetched")
                 .data(subscriptionService.getByUserId(userId))
+                .build());
+    }
+
+    @GetMapping("/me/usage")
+    public ResponseEntity<ApiResponse<SubscriptionUsageResponse>> getMyUsage(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.<SubscriptionUsageResponse>builder()
+                .success(true)
+                .message("Subscription usage fetched")
+                .data(subscriptionService.getUsageByUserEmail(authentication.getName()))
                 .build());
     }
 }

@@ -3,16 +3,19 @@ package com.TalentForge.talentforge.user.controller;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import com.TalentForge.talentforge.user.dto.UserCreateRequest;
 import com.TalentForge.talentforge.user.dto.UserResponse;
+import com.TalentForge.talentforge.user.dto.UserUpdateRequest;
 import com.TalentForge.talentforge.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
 
 import java.util.List;
 
@@ -47,6 +50,27 @@ public class UserController {
                 .success(true)
                 .message("User fetched")
                 .data(userService.getById(id))
+                .build());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> getMe(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.<UserResponse>builder()
+                .success(true)
+                .message("Current user fetched")
+                .data(userService.getCurrentUser(authentication.getName()))
+                .build());
+    }
+
+    @PatchMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> updateMe(
+            Authentication authentication,
+            @Valid @RequestBody UserUpdateRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.<UserResponse>builder()
+                .success(true)
+                .message("Profile updated")
+                .data(userService.updateCurrentUser(authentication.getName(), request))
                 .build());
     }
 

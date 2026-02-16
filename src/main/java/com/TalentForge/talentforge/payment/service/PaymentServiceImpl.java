@@ -4,6 +4,7 @@ import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
 import com.TalentForge.talentforge.payment.dto.PaymentInitializeRequest;
 import com.TalentForge.talentforge.payment.dto.PaymentInitializeResponse;
+import com.TalentForge.talentforge.payment.dto.PaymentHistoryItemResponse;
 import com.TalentForge.talentforge.payment.dto.PaymentOptionsResponse;
 import com.TalentForge.talentforge.payment.dto.PaymentVerifyResponse;
 import com.TalentForge.talentforge.payment.entity.BillingCycle;
@@ -258,6 +259,16 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<PaymentHistoryItemResponse> getHistory() {
+        User currentUser = getAuthenticatedUser();
+        return paymentTransactionRepository.findByUserIdOrderByCreatedAtDesc(currentUser.getId())
+                .stream()
+                .map(this::toHistoryItem)
+                .toList();
+    }
+
+    @Override
     public void processWebhook(String signature, String payload) {
         assertPaystackConfigured();
 
@@ -479,6 +490,7 @@ public class PaymentServiceImpl implements PaymentService {
     private List<PaymentCurrency> resolveSupportedCurrencies() {
         String configuredText = paystackSupportedCurrencies == null ? "" : paystackSupportedCurrencies;
         Set<PaymentCurrency> configured = new LinkedHashSet<>();
+        configured.add(resolveDefaultCurrency());
 
         for (String raw : configuredText.split(",")) {
             if (isBlank(raw)) {
@@ -492,8 +504,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
 
-        if (configured.isEmpty()) {
-            configured.add(resolveDefaultCurrency());
+        if (configured.size() == 1 && configured.contains(resolveDefaultCurrency())) {
             configured.add(PaymentCurrency.NGN);
         }
         return new ArrayList<>(configured);
@@ -650,6 +661,25 @@ public class PaymentServiceImpl implements PaymentService {
                 transaction.getCurrency(),
                 transaction.getAmountMinor(),
                 transaction.getAmountUsdMinor(),
+                transaction.getPaidAt()
+        );
+    }
+
+    private PaymentHistoryItemResponse toHistoryItem(PaymentTransaction transaction) {
+        return new PaymentHistoryItemResponse(
+                transaction.getId(),
+                transaction.getReference(),
+                transaction.getPlanType(),
+                transaction.getBillingCycle(),
+                transaction.getCurrency(),
+                transaction.getAmountMinor(),
+                transaction.getAmountUsdMinor(),
+                transaction.getStatus(),
+                transaction.getGatewayStatus(),
+                transaction.getGatewayResponse(),
+                transaction.getChannel(),
+                transaction.getAuthorizationUrl(),
+                transaction.getCreatedAt(),
                 transaction.getPaidAt()
         );
     }

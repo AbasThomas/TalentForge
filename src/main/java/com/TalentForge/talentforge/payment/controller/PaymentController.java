@@ -3,6 +3,7 @@ package com.TalentForge.talentforge.payment.controller;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import com.TalentForge.talentforge.payment.dto.PaymentInitializeRequest;
 import com.TalentForge.talentforge.payment.dto.PaymentInitializeResponse;
+import com.TalentForge.talentforge.payment.dto.PaymentHistoryItemResponse;
 import com.TalentForge.talentforge.payment.dto.PaymentOptionsResponse;
 import com.TalentForge.talentforge.payment.dto.PaymentVerifyResponse;
 import com.TalentForge.talentforge.payment.service.PaymentService;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/payments")
@@ -48,6 +51,15 @@ public class PaymentController {
                 .success(true)
                 .message("Payment verification completed")
                 .data(paymentService.verify(reference))
+                .build());
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<ApiResponse<List<PaymentHistoryItemResponse>>> history() {
+        return ResponseEntity.ok(ApiResponse.<List<PaymentHistoryItemResponse>>builder()
+                .success(true)
+                .message("Payment history fetched")
+                .data(paymentService.getHistory())
                 .build());
     }
 
