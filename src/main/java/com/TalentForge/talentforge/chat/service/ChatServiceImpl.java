@@ -36,7 +36,10 @@ public class ChatServiceImpl implements ChatService {
         try {
             aiReply = aiAssistantService.generateChatReply(request.message());
         } catch (Exception ex) {
-            log.warn("AI chat unavailable for userId={}. Falling back to deterministic reply.", request.userId(), ex);
+            log.warn("AI chat unavailable for userId={}. Falling back to deterministic reply. reason={}",
+                    request.userId(),
+                    ex.getMessage());
+            log.debug("AI chat failure stacktrace for userId={}", request.userId(), ex);
             aiReply = fallbackReply(request.message());
         }
         ChatMessage botMessage = ChatMessage.builder()

@@ -19,10 +19,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -34,13 +37,32 @@ public class OllamaAiAssistantService implements AiAssistantService {
 
     private final ChatClient.Builder chatClientBuilder;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ExecutorService aiExecutor = Executors.newCachedThreadPool();
+    private final ExecutorService aiExecutor = Executors.newFixedThreadPool(4, new ThreadFactory() {
+        private int index = 0;
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "tf-ai-worker-" + (++index));
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
+    private final AtomicLong aiCooldownUntilEpochMs = new AtomicLong(0);
 
     @Value("${app.ai.timeout-ms:30000}")
     private long aiTimeoutMs;
 
     @Value("${app.ai.max-retries:2}")
     private int aiMaxRetries;
+
+    @Value("${app.ai.chat-timeout-ms:6000}")
+    private long aiChatTimeoutMs;
+
+    @Value("${app.ai.chat-max-retries:1}")
+    private int aiChatMaxRetries;
+
+    @Value("${app.ai.failure-cooldown-ms:45000}")
+    private long aiFailureCooldownMs;
 
     @Value("${spring.ai.ollama.chat.options.model:llama3.2:latest}")
     private String configuredModel;
@@ -64,7 +86,7 @@ public class OllamaAiAssistantService implements AiAssistantService {
                     sanitizeForPrompt(requirements, 3000)
             );
 
-            return callAi(prompt);
+            return callAi(prompt, aiTimeoutMs, aiMaxRetries);
         } catch (Exception ex) {
             return "Bias check unavailable. Please review language manually for age, gender, and cultural exclusions.";
         }
@@ -102,7 +124,7 @@ public class OllamaAiAssistantService implements AiAssistantService {
                     %s
                     """.formatted(safeJobText, safeResumeText);
 
-            String raw = callAi(prompt);
+            String raw = callAi(prompt, aiTimeoutMs, aiMaxRetries);
             JsonNode node = parseJsonResponse(raw);
 
             double score = Math.max(0, Math.min(100, node.path("score").asDouble(0)));
@@ -128,7 +150,7 @@ public class OllamaAiAssistantService implements AiAssistantService {
                 """.formatted(sanitizeForPrompt(message, 3000));
 
         try {
-            return callAi(prompt);
+            return callAi(prompt, aiChatTimeoutMs, aiChatMaxRetries);
         } catch (Exception ex) {
             throw new AiServiceUnavailableException(
                     "AI service unavailable. Verify Ollama is running and the configured model is loaded.",
@@ -137,29 +159,42 @@ public class OllamaAiAssistantService implements AiAssistantService {
         }
     }
 
-    private String callAi(String prompt) {
-        int attempts = Math.max(1, aiMaxRetries);
+    private String callAi(String prompt, long timeoutMs, int maxRetries) {
+        long cooldownUntil = aiCooldownUntilEpochMs.get();
+        long now = System.currentTimeMillis();
+        if (cooldownUntil > now) {
+            throw new RuntimeException("AI temporarily cooling down after recent failures");
+        }
+
+        int attempts = Math.max(1, maxRetries);
+        long timeout = Math.max(1000L, timeoutMs);
         RuntimeException lastFailure = null;
 
         for (int attempt = 1; attempt <= attempts; attempt++) {
-            Future<String> future = aiExecutor.submit(() -> chatClientBuilder.build()
-                    .prompt()
-                    .user(prompt)
-                    .call()
-                    .content());
+            CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> chatClientBuilder.build()
+                            .prompt()
+                            .user(prompt)
+                            .call()
+                            .content(),
+                    aiExecutor);
 
             try {
-                String response = future.get(Math.max(1000L, aiTimeoutMs), TimeUnit.MILLISECONDS);
+                String response = future.get(timeout, TimeUnit.MILLISECONDS);
                 if (response != null && !response.isBlank()) {
+                    aiCooldownUntilEpochMs.set(0);
                     return response.trim();
                 }
                 throw new RuntimeException("AI returned an empty response from model " + configuredModel);
+            } catch (TimeoutException ex) {
+                future.cancel(true);
+                lastFailure = new RuntimeException("AI call timed out on attempt " + attempt, ex);
             } catch (Exception ex) {
                 future.cancel(true);
-                lastFailure = new RuntimeException("AI call timed out or failed on attempt " + attempt, ex);
+                lastFailure = new RuntimeException("AI call failed on attempt " + attempt, ex);
             }
         }
 
+        aiCooldownUntilEpochMs.set(System.currentTimeMillis() + Math.max(1000L, aiFailureCooldownMs));
         throw lastFailure == null ? new RuntimeException("AI call failed") : lastFailure;
     }
 
