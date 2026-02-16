@@ -125,6 +125,15 @@ Base path: `/api/v1`
 | POST | `/subscriptions` | RECRUITER, ADMIN | Create/update subscription |
 | GET | `/subscriptions/user/{userId}` | Any authenticated | Get user subscription |
 
+### Payments (Paystack)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/payments/options` | Public | Supported currencies, channels, and plan prices |
+| POST | `/payments/initialize` | RECRUITER, ADMIN | Initialize checkout and get Paystack authorization URL |
+| GET | `/payments/verify/{reference}` | RECRUITER, ADMIN | Verify payment and activate subscription |
+| POST | `/payments/webhook` | Public | Paystack webhook receiver (HMAC signature verified) |
+
 ### Chat
 
 | Method | Endpoint | Auth | Description |
@@ -170,3 +179,15 @@ Latest run status (February 14, 2026):
 - `TOTAL=34`
 - `PASSED=34`
 - `FAILED=0`
+
+## Paystack Setup
+
+Add these environment variables:
+- `PAYSTACK_SECRET_KEY`
+- `PAYSTACK_WEBHOOK_SECRET` (optional; falls back to secret key)
+- `PAYSTACK_CALLBACK_URL` (e.g., `http://localhost:3000/recruiter/subscription`)
+- `PAYSTACK_CHANNELS` (comma-separated)
+- `PAYSTACK_FX_NGN`, `PAYSTACK_FX_GHS`, `PAYSTACK_FX_KES`, `PAYSTACK_FX_ZAR`
+
+Webhook URL for Paystack dashboard:
+- `POST /api/v1/payments/webhook`

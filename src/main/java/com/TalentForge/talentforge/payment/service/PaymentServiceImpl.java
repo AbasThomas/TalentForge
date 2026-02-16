@@ -1,0 +1,605 @@
+package com.TalentForge.talentforge.payment.service;
+
+import com.TalentForge.talentforge.common.exception.BadRequestException;
+import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
+import com.TalentForge.talentforge.payment.dto.PaymentInitializeRequest;
+import com.TalentForge.talentforge.payment.dto.PaymentInitializeResponse;
+import com.TalentForge.talentforge.payment.dto.PaymentOptionsResponse;
+import com.TalentForge.talentforge.payment.dto.PaymentVerifyResponse;
+import com.TalentForge.talentforge.payment.entity.BillingCycle;
+import com.TalentForge.talentforge.payment.entity.PaymentCurrency;
+import com.TalentForge.talentforge.payment.entity.PaymentStatus;
+import com.TalentForge.talentforge.payment.entity.PaymentTransaction;
+import com.TalentForge.talentforge.payment.repository.PaymentTransactionRepository;
+import com.TalentForge.talentforge.subscription.entity.PlanType;
+import com.TalentForge.talentforge.subscription.entity.Subscription;
+import com.TalentForge.talentforge.subscription.repository.SubscriptionRepository;
+import com.TalentForge.talentforge.user.entity.User;
+import com.TalentForge.talentforge.user.entity.UserRole;
+import com.TalentForge.talentforge.user.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HexFormat;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class PaymentServiceImpl implements PaymentService {
+
+    private static final Set<String> SUPPORTED_CHANNELS = Set.of(
+            "card",
+            "bank",
+            "ussd",
+            "qr",
+            "mobile_money",
+            "bank_transfer",
+            "eft"
+    );
+
+    private static final Map<PlanType, Map<BillingCycle, Long>> PLAN_USD_PRICE_MINOR = Map.of(
+            PlanType.BASIC, Map.of(BillingCycle.MONTHLY, 1900L, BillingCycle.ANNUAL, 18000L),
+            PlanType.PRO, Map.of(BillingCycle.MONTHLY, 4900L, BillingCycle.ANNUAL, 48000L),
+            PlanType.ENTERPRISE, Map.of(BillingCycle.MONTHLY, 19900L)
+    );
+
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final SubscriptionRepository subscriptionRepository;
+    private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .build();
+
+    @Value("${app.paystack.secret-key:}")
+    private String paystackSecretKey;
+
+    @Value("${app.paystack.webhook-secret:}")
+    private String paystackWebhookSecret;
+
+    @Value("${app.paystack.base-url:https://api.paystack.co}")
+    private String paystackBaseUrl;
+
+    @Value("${app.paystack.callback-url:http://localhost:3000/recruiter/subscription}")
+    private String paystackCallbackUrl;
+
+    @Value("${app.paystack.channels:card,bank,ussd,qr,mobile_money,bank_transfer,eft}")
+    private String paystackChannels;
+
+    @Value("${app.paystack.fx.ngn:1500}")
+    private BigDecimal ngnRate;
+
+    @Value("${app.paystack.fx.ghs:15.5}")
+    private BigDecimal ghsRate;
+
+    @Value("${app.paystack.fx.kes:130}")
+    private BigDecimal kesRate;
+
+    @Value("${app.paystack.fx.zar:18.5}")
+    private BigDecimal zarRate;
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentOptionsResponse getOptions() {
+        List<String> channels = resolveChannels(null);
+        List<PaymentCurrency> currencies = Arrays.asList(PaymentCurrency.values());
+        List<PaymentOptionsResponse.PaymentPriceOption> prices = new ArrayList<>();
+
+        for (PlanType planType : PlanType.values()) {
+            for (BillingCycle cycle : BillingCycle.values()) {
+                for (PaymentCurrency currency : PaymentCurrency.values()) {
+                    if (planType == PlanType.FREE) {
+                        prices.add(new PaymentOptionsResponse.PaymentPriceOption(
+                                planType,
+                                cycle,
+                                currency,
+                                0L,
+                                0L,
+                                true,
+                                "No payment required"
+                        ));
+                        continue;
+                    }
+
+                    Long amountUsdMinor = resolveUsdMinorAmount(planType, cycle);
+                    if (amountUsdMinor == null) {
+                        prices.add(new PaymentOptionsResponse.PaymentPriceOption(
+                                planType,
+                                cycle,
+                                currency,
+                                0L,
+                                0L,
+                                false,
+                                "Custom quote required"
+                        ));
+                        continue;
+                    }
+
+                    prices.add(new PaymentOptionsResponse.PaymentPriceOption(
+                            planType,
+                            cycle,
+                            currency,
+                            convertUsdMinor(amountUsdMinor, currency),
+                            amountUsdMinor,
+                            true,
+                            "Paystack checkout"
+                    ));
+                }
+            }
+        }
+
+        return new PaymentOptionsResponse(currencies, channels, prices);
+    }
+
+    @Override
+    public PaymentInitializeResponse initialize(PaymentInitializeRequest request) {
+        assertPaystackConfigured();
+        User currentUser = getAuthenticatedUser();
+        assertPaymentAllowedRole(currentUser);
+
+        if (request.planType() == PlanType.FREE) {
+            throw new BadRequestException("Free plan does not require payment");
+        }
+
+        Long amountUsdMinor = resolveUsdMinorAmount(request.planType(), request.billingCycle());
+        if (amountUsdMinor == null) {
+            throw new BadRequestException("Selected plan and billing cycle requires a custom quote");
+        }
+
+        long amountMinor = convertUsdMinor(amountUsdMinor, request.currency());
+        List<String> channels = resolveChannels(request.channels());
+        String reference = generateReference();
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("email", currentUser.getEmail());
+        payload.put("amount", amountMinor);
+        payload.put("currency", request.currency().name());
+        payload.put("reference", reference);
+        payload.put("callback_url", paystackCallbackUrl);
+
+        ArrayNode channelArray = payload.putArray("channels");
+        channels.forEach(channelArray::add);
+
+        ObjectNode metadata = payload.putObject("metadata");
+        metadata.put("userId", currentUser.getId());
+        metadata.put("planType", request.planType().name());
+        metadata.put("billingCycle", request.billingCycle().name());
+        metadata.put("currency", request.currency().name());
+
+        JsonNode root = requestPaystack("POST", "/transaction/initialize", payload.toString());
+        JsonNode data = root.path("data");
+
+        String authorizationUrl = readText(data, "authorization_url");
+        String accessCode = readText(data, "access_code");
+        String paystackReference = readText(data, "reference");
+
+        if (isBlank(paystackReference)) {
+            throw new BadRequestException("Paystack did not return a payment reference");
+        }
+
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .user(currentUser)
+                .planType(request.planType())
+                .billingCycle(request.billingCycle())
+                .currency(request.currency())
+                .amountMinor(amountMinor)
+                .amountUsdMinor(amountUsdMinor)
+                .reference(paystackReference)
+                .accessCode(accessCode)
+                .authorizationUrl(authorizationUrl)
+                .status(PaymentStatus.PENDING)
+                .gatewayStatus("pending")
+                .build();
+        paymentTransactionRepository.save(transaction);
+
+        return new PaymentInitializeResponse(
+                transaction.getReference(),
+                transaction.getAuthorizationUrl(),
+                transaction.getAccessCode(),
+                transaction.getPlanType(),
+                transaction.getBillingCycle(),
+                transaction.getCurrency(),
+                transaction.getAmountMinor(),
+                transaction.getAmountUsdMinor(),
+                channels
+        );
+    }
+
+    @Override
+    public PaymentVerifyResponse verify(String reference) {
+        assertPaystackConfigured();
+        User currentUser = getAuthenticatedUser();
+
+        PaymentTransaction transaction = paymentTransactionRepository.findByReference(reference)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment reference not found: " + reference));
+
+        boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;
+        if (!isAdmin && !transaction.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("You can only verify your own payments");
+        }
+
+        verifyAndApply(reference);
+
+        PaymentTransaction updated = paymentTransactionRepository.findByReference(reference)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment reference not found after verification: " + reference));
+
+        return toVerifyResponse(updated);
+    }
+
+    @Override
+    public void processWebhook(String signature, String payload) {
+        assertPaystackConfigured();
+
+        if (!isValidWebhookSignature(signature, payload)) {
+            throw new AccessDeniedException("Invalid Paystack webhook signature");
+        }
+
+        JsonNode eventPayload = parseJson(payload);
+        String event = readText(eventPayload, "event");
+        JsonNode data = eventPayload.path("data");
+        String reference = readText(data, "reference");
+
+        if (isBlank(event) || isBlank(reference)) {
+            return;
+        }
+
+        PaymentTransaction transaction = paymentTransactionRepository.findByReference(reference).orElse(null);
+        if (transaction == null) {
+            return;
+        }
+
+        switch (event) {
+            case "charge.success" -> verifyAndApply(reference);
+            case "charge.failed" -> {
+                if (transaction.getStatus() != PaymentStatus.SUCCESS) {
+                    transaction.setStatus(PaymentStatus.FAILED);
+                    transaction.setGatewayStatus(readText(data, "status"));
+                    transaction.setGatewayResponse(readText(data, "gateway_response"));
+                    transaction.setChannel(readText(data, "channel"));
+                    paymentTransactionRepository.save(transaction);
+                }
+            }
+            case "charge.abandoned" -> {
+                if (transaction.getStatus() != PaymentStatus.SUCCESS) {
+                    transaction.setStatus(PaymentStatus.ABANDONED);
+                    transaction.setGatewayStatus(readText(data, "status"));
+                    transaction.setGatewayResponse(readText(data, "gateway_response"));
+                    transaction.setChannel(readText(data, "channel"));
+                    paymentTransactionRepository.save(transaction);
+                }
+            }
+            default -> {
+                // Ignore unrelated events.
+            }
+        }
+    }
+
+    private void verifyAndApply(String reference) {
+        JsonNode root = requestPaystack(
+                "GET",
+                "/transaction/verify/" + URLEncoder.encode(reference, StandardCharsets.UTF_8),
+                null
+        );
+        JsonNode data = root.path("data");
+
+        PaymentTransaction transaction = paymentTransactionRepository.findByReference(reference)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment reference not found: " + reference));
+
+        String gatewayStatus = readText(data, "status");
+        String normalizedStatus = gatewayStatus == null ? "" : gatewayStatus.trim().toLowerCase();
+        String gatewayResponse = readText(data, "gateway_response");
+        String channel = readText(data, "channel");
+        LocalDateTime paidAt = parsePaystackDateTime(readText(data, "paid_at"));
+        long verifiedAmount = data.path("amount").asLong(-1);
+        String verifiedCurrency = readText(data, "currency");
+
+        transaction.setGatewayStatus(gatewayStatus);
+        transaction.setGatewayResponse(gatewayResponse);
+        transaction.setChannel(channel);
+
+        if (verifiedAmount > 0 && !verifiedAmountEqualsExpected(verifiedAmount, transaction.getAmountMinor())) {
+            transaction.setStatus(PaymentStatus.FAILED);
+            transaction.setGatewayResponse("Amount mismatch during verification");
+            paymentTransactionRepository.save(transaction);
+            return;
+        }
+
+        if (!isBlank(verifiedCurrency) && !verifiedCurrency.equalsIgnoreCase(transaction.getCurrency().name())) {
+            transaction.setStatus(PaymentStatus.FAILED);
+            transaction.setGatewayResponse("Currency mismatch during verification");
+            paymentTransactionRepository.save(transaction);
+            return;
+        }
+
+        if ("success".equals(normalizedStatus)) {
+            transaction.setStatus(PaymentStatus.SUCCESS);
+            if (paidAt != null) {
+                transaction.setPaidAt(paidAt);
+            } else if (transaction.getPaidAt() == null) {
+                transaction.setPaidAt(LocalDateTime.now());
+            }
+            applySubscriptionForSuccessfulPayment(transaction);
+        } else if ("abandoned".equals(normalizedStatus)) {
+            if (transaction.getStatus() != PaymentStatus.SUCCESS) {
+                transaction.setStatus(PaymentStatus.ABANDONED);
+            }
+        } else {
+            if (transaction.getStatus() != PaymentStatus.SUCCESS) {
+                transaction.setStatus(PaymentStatus.FAILED);
+            }
+        }
+
+        paymentTransactionRepository.save(transaction);
+    }
+
+    private void applySubscriptionForSuccessfulPayment(PaymentTransaction transaction) {
+        Subscription subscription = subscriptionRepository.findByUserId(transaction.getUser().getId())
+                .orElse(Subscription.builder().user(transaction.getUser()).build());
+
+        PlanLimits limits = resolvePlanLimits(transaction.getPlanType());
+        LocalDateTime startDate = transaction.getPaidAt() == null ? LocalDateTime.now() : transaction.getPaidAt();
+        LocalDateTime endDate = switch (transaction.getBillingCycle()) {
+            case MONTHLY -> startDate.plusMonths(1);
+            case ANNUAL -> startDate.plusYears(1);
+        };
+
+        subscription.setPlanType(transaction.getPlanType());
+        subscription.setStartDate(startDate);
+        subscription.setEndDate(endDate);
+        subscription.setActive(true);
+        subscription.setJobPostLimit(limits.jobPostLimit());
+        subscription.setApplicantLimit(limits.applicantLimit());
+        subscription.setPaymentReference(transaction.getReference());
+
+        subscriptionRepository.save(subscription);
+    }
+
+    private PlanLimits resolvePlanLimits(PlanType planType) {
+        return switch (planType) {
+            case FREE -> new PlanLimits(3, 50);
+            case BASIC, PRO, ENTERPRISE -> new PlanLimits(null, null);
+        };
+    }
+
+    private record PlanLimits(Integer jobPostLimit, Integer applicantLimit) {
+    }
+
+    private Long resolveUsdMinorAmount(PlanType planType, BillingCycle cycle) {
+        Map<BillingCycle, Long> byCycle = PLAN_USD_PRICE_MINOR.get(planType);
+        if (byCycle == null) {
+            return null;
+        }
+        return byCycle.get(cycle);
+    }
+
+    private long convertUsdMinor(long usdMinor, PaymentCurrency currency) {
+        if (currency == PaymentCurrency.USD) {
+            return usdMinor;
+        }
+
+        BigDecimal rate = switch (currency) {
+            case NGN -> ngnRate;
+            case GHS -> ghsRate;
+            case KES -> kesRate;
+            case ZAR -> zarRate;
+            case USD -> BigDecimal.ONE;
+        };
+
+        return BigDecimal.valueOf(usdMinor)
+                .multiply(rate)
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValue();
+    }
+
+    private List<String> resolveChannels(List<String> requestedChannels) {
+        List<String> configured = parseConfiguredChannels();
+        if (requestedChannels == null || requestedChannels.isEmpty()) {
+            return configured;
+        }
+
+        Set<String> deduplicated = new LinkedHashSet<>();
+        for (String channel : requestedChannels) {
+            if (isBlank(channel)) {
+                continue;
+            }
+            String normalized = channel.trim().toLowerCase();
+            if (!SUPPORTED_CHANNELS.contains(normalized)) {
+                throw new BadRequestException("Unsupported payment channel: " + channel);
+            }
+            deduplicated.add(normalized);
+        }
+
+        if (deduplicated.isEmpty()) {
+            return configured;
+        }
+
+        return new ArrayList<>(deduplicated);
+    }
+
+    private List<String> parseConfiguredChannels() {
+        String value = paystackChannels == null ? "" : paystackChannels;
+        Set<String> configured = new LinkedHashSet<>();
+        for (String channel : value.split(",")) {
+            if (isBlank(channel)) {
+                continue;
+            }
+            configured.add(channel.trim().toLowerCase());
+        }
+
+        configured.removeIf(channel -> !SUPPORTED_CHANNELS.contains(channel));
+        if (configured.isEmpty()) {
+            configured.addAll(SUPPORTED_CHANNELS);
+        }
+
+        return new ArrayList<>(configured);
+    }
+
+    private JsonNode requestPaystack(String method, String path, String payload) {
+        try {
+            String normalizedBaseUrl = paystackBaseUrl == null ? "https://api.paystack.co" : paystackBaseUrl.replaceAll("/+$", "");
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(normalizedBaseUrl + path))
+                    .header("Authorization", "Bearer " + paystackSecretKey)
+                    .header("Accept", "application/json")
+                    .timeout(Duration.ofSeconds(30));
+
+            if ("POST".equalsIgnoreCase(method)) {
+                builder.header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(payload == null ? "{}" : payload));
+            } else {
+                builder.GET();
+            }
+
+            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            JsonNode root = parseJson(response.body());
+
+            if (response.statusCode() >= 400 || !root.path("status").asBoolean(false)) {
+                String message = readText(root, "message");
+                if (isBlank(message)) {
+                    message = "Paystack request failed";
+                }
+                throw new BadRequestException(message);
+            }
+
+            return root;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new BadRequestException("Paystack request interrupted");
+        } catch (BadRequestException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BadRequestException("Unable to reach Paystack: " + exception.getMessage());
+        }
+    }
+
+    private JsonNode parseJson(String payload) {
+        try {
+            return objectMapper.readTree(payload == null ? "{}" : payload);
+        } catch (Exception exception) {
+            throw new BadRequestException("Invalid JSON payload");
+        }
+    }
+
+    private PaymentVerifyResponse toVerifyResponse(PaymentTransaction transaction) {
+        return new PaymentVerifyResponse(
+                transaction.getReference(),
+                transaction.getStatus(),
+                transaction.getGatewayStatus(),
+                transaction.getGatewayResponse(),
+                transaction.getChannel(),
+                transaction.getPlanType(),
+                transaction.getBillingCycle(),
+                transaction.getCurrency(),
+                transaction.getAmountMinor(),
+                transaction.getAmountUsdMinor(),
+                transaction.getPaidAt()
+        );
+    }
+
+    private boolean isValidWebhookSignature(String signature, String payload) {
+        if (isBlank(signature)) {
+            return false;
+        }
+
+        String secret = isBlank(paystackWebhookSecret) ? paystackSecretKey : paystackWebhookSecret;
+        if (isBlank(secret)) {
+            return false;
+        }
+
+        try {
+            Mac mac = Mac.getInstance("HmacSHA512");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA512"));
+            byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            String expected = HexFormat.of().formatHex(hash);
+            return expected.equalsIgnoreCase(signature.trim());
+        } catch (Exception exception) {
+            return false;
+        }
+    }
+
+    private void assertPaystackConfigured() {
+        if (isBlank(paystackSecretKey)) {
+            throw new BadRequestException("Paystack is not configured. Set PAYSTACK_SECRET_KEY.");
+        }
+    }
+
+    private User getAuthenticatedUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new AccessDeniedException("Authenticated user not found"));
+    }
+
+    private void assertPaymentAllowedRole(User user) {
+        if (user.getRole() != UserRole.RECRUITER && user.getRole() != UserRole.ADMIN) {
+            throw new AccessDeniedException("Payments are available only for recruiter and admin accounts");
+        }
+    }
+
+    private String generateReference() {
+        return "TF-" + System.currentTimeMillis() + "-" + ThreadLocalRandom.current().nextInt(100000, 999999);
+    }
+
+    private String readText(JsonNode node, String fieldName) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        JsonNode value = node.path(fieldName);
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        return value.asText();
+    }
+
+    private LocalDateTime parsePaystackDateTime(String value) {
+        if (isBlank(value)) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(value).toLocalDateTime();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private boolean verifiedAmountEqualsExpected(long verifiedAmount, Long expectedAmount) {
+        return expectedAmount != null && expectedAmount == verifiedAmount;
+    }
+}
