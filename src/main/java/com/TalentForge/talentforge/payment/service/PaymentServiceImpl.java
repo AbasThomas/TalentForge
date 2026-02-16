@@ -99,6 +99,15 @@ public class PaymentServiceImpl implements PaymentService {
     @Value("${app.paystack.channels:card,bank,ussd,qr,mobile_money,bank_transfer,eft}")
     private String paystackChannels;
 
+    @Value("${app.paystack.supported-currencies:USD,NGN,GHS,KES,ZAR}")
+    private String paystackSupportedCurrencies;
+
+    @Value("${app.paystack.default-currency:USD}")
+    private String paystackDefaultCurrency;
+
+    @Value("${app.paystack.auto-detect-currency:true}")
+    private boolean paystackAutoDetectCurrency;
+
     @Value("${app.paystack.fx.ngn:1500}")
     private BigDecimal ngnRate;
 
@@ -115,13 +124,13 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public PaymentOptionsResponse getOptions() {
         List<String> channels = resolveChannels(null);
-        List<PaymentCurrency> currencies = Arrays.asList(PaymentCurrency.values());
+        List<PaymentCurrency> currencies = resolveSupportedCurrencies();
         List<PaymentOptionsResponse.PaymentPriceOption> prices = new ArrayList<>();
 
         for (PlanType planType : List.of(PlanType.BASIC, PlanType.PRO, PlanType.ENTERPRISE)) {
             PlanLimits limits = resolvePlanLimits(planType);
             for (BillingCycle cycle : BillingCycle.values()) {
-                for (PaymentCurrency currency : PaymentCurrency.values()) {
+                for (PaymentCurrency currency : currencies) {
                     Long amountUsdMinor = resolveUsdMinorAmount(planType, cycle);
                     if (amountUsdMinor == null) {
                         prices.add(new PaymentOptionsResponse.PaymentPriceOption(
@@ -165,6 +174,7 @@ public class PaymentServiceImpl implements PaymentService {
         assertPaystackConfigured();
         User currentUser = getAuthenticatedUser();
         assertPaymentAllowedRole(currentUser);
+        validateCurrencySupported(request.currency());
 
         if (request.planType() == PlanType.FREE) {
             throw new BadRequestException("Free plan does not require payment");
@@ -175,28 +185,20 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("Selected plan and billing cycle requires a custom quote");
         }
 
-        long amountMinor = convertUsdMinor(amountUsdMinor, request.currency());
+        PaymentCurrency requestedCurrency = request.currency() == null ? resolveDefaultCurrency() : request.currency();
+        if (!paystackAutoDetectCurrency) {
+            validateCurrencySupported(requestedCurrency);
+        }
+
+        PaystackInitializeResult initializeResult = initializeTransactionWithAutoCurrency(
+                currentUser,
+                request,
+                amountUsdMinor,
+                requestedCurrency
+        );
+
         List<String> channels = resolveChannels(request.channels());
-        String reference = generateReference();
-
-        ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("email", currentUser.getEmail());
-        payload.put("amount", amountMinor);
-        payload.put("currency", request.currency().name());
-        payload.put("reference", reference);
-        payload.put("callback_url", resolveCallbackUrl(currentUser));
-
-        ArrayNode channelArray = payload.putArray("channels");
-        channels.forEach(channelArray::add);
-
-        ObjectNode metadata = payload.putObject("metadata");
-        metadata.put("userId", currentUser.getId());
-        metadata.put("planType", request.planType().name());
-        metadata.put("billingCycle", request.billingCycle().name());
-        metadata.put("currency", request.currency().name());
-
-        JsonNode root = requestPaystack("POST", "/transaction/initialize", payload.toString());
-        JsonNode data = root.path("data");
+        JsonNode data = initializeResult.root().path("data");
 
         String authorizationUrl = readText(data, "authorization_url");
         String accessCode = readText(data, "access_code");
@@ -210,8 +212,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .user(currentUser)
                 .planType(request.planType())
                 .billingCycle(request.billingCycle())
-                .currency(request.currency())
-                .amountMinor(amountMinor)
+                .currency(initializeResult.currency())
+                .amountMinor(initializeResult.amountMinor())
                 .amountUsdMinor(amountUsdMinor)
                 .reference(paystackReference)
                 .accessCode(accessCode)
@@ -472,6 +474,122 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         return new ArrayList<>(configured);
+    }
+
+    private List<PaymentCurrency> resolveSupportedCurrencies() {
+        String configuredText = paystackSupportedCurrencies == null ? "" : paystackSupportedCurrencies;
+        Set<PaymentCurrency> configured = new LinkedHashSet<>();
+
+        for (String raw : configuredText.split(",")) {
+            if (isBlank(raw)) {
+                continue;
+            }
+            String normalized = raw.trim().toUpperCase();
+            try {
+                configured.add(PaymentCurrency.valueOf(normalized));
+            } catch (IllegalArgumentException ignored) {
+                // Ignore unknown values from env.
+            }
+        }
+
+        if (configured.isEmpty()) {
+            configured.add(resolveDefaultCurrency());
+            configured.add(PaymentCurrency.NGN);
+        }
+        return new ArrayList<>(configured);
+    }
+
+    private void validateCurrencySupported(PaymentCurrency currency) {
+        List<PaymentCurrency> supported = resolveSupportedCurrencies();
+        if (!supported.contains(currency)) {
+            throw new BadRequestException(
+                    "Currency " + currency.name() + " is not enabled for this merchant. Supported: " +
+                            supported.stream().map(Enum::name).reduce((a, b) -> a + ", " + b).orElse("NGN")
+            );
+        }
+    }
+
+    private PaystackInitializeResult initializeTransactionWithAutoCurrency(
+            User currentUser,
+            PaymentInitializeRequest request,
+            Long amountUsdMinor,
+            PaymentCurrency preferredCurrency
+    ) {
+        List<String> channels = resolveChannels(request.channels());
+        List<PaymentCurrency> attemptCurrencies = resolveAttemptCurrencies(preferredCurrency);
+        BadRequestException lastFailure = null;
+
+        for (PaymentCurrency currency : attemptCurrencies) {
+            String reference = generateReference();
+            long amountMinor = convertUsdMinor(amountUsdMinor, currency);
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("email", currentUser.getEmail());
+            payload.put("amount", amountMinor);
+            payload.put("currency", currency.name());
+            payload.put("reference", reference);
+            payload.put("callback_url", resolveCallbackUrl(currentUser));
+
+            ArrayNode channelArray = payload.putArray("channels");
+            channels.forEach(channelArray::add);
+
+            ObjectNode metadata = payload.putObject("metadata");
+            metadata.put("userId", currentUser.getId());
+            metadata.put("planType", request.planType().name());
+            metadata.put("billingCycle", request.billingCycle().name());
+            metadata.put("currency", currency.name());
+            metadata.put("currencyRequested", preferredCurrency.name());
+            metadata.put("currencyAutoDetectEnabled", paystackAutoDetectCurrency);
+
+            try {
+                JsonNode root = requestPaystack("POST", "/transaction/initialize", payload.toString());
+                return new PaystackInitializeResult(root, currency, amountMinor);
+            } catch (BadRequestException exception) {
+                lastFailure = exception;
+                if (paystackAutoDetectCurrency && isCurrencyUnsupportedError(exception.getMessage())) {
+                    continue;
+                }
+                throw exception;
+            }
+        }
+
+        if (lastFailure != null) {
+            throw lastFailure;
+        }
+        throw new BadRequestException("Unable to initialize payment for available currencies");
+    }
+
+    private List<PaymentCurrency> resolveAttemptCurrencies(PaymentCurrency preferredCurrency) {
+        LinkedHashSet<PaymentCurrency> ordered = new LinkedHashSet<>();
+        ordered.add(preferredCurrency);
+        ordered.addAll(resolveSupportedCurrencies());
+        return new ArrayList<>(ordered);
+    }
+
+    private boolean isCurrencyUnsupportedError(String message) {
+        if (isBlank(message)) {
+            return false;
+        }
+        String normalized = message.trim().toLowerCase();
+        return normalized.contains("currency not supported");
+    }
+
+    private PaymentCurrency resolveDefaultCurrency() {
+        if (!isBlank(paystackDefaultCurrency)) {
+            try {
+                return PaymentCurrency.valueOf(paystackDefaultCurrency.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                // Fall through to USD.
+            }
+        }
+        return PaymentCurrency.USD;
+    }
+
+    private record PaystackInitializeResult(
+            JsonNode root,
+            PaymentCurrency currency,
+            long amountMinor
+    ) {
     }
 
     private JsonNode requestPaystack(String method, String path, String payload) {
