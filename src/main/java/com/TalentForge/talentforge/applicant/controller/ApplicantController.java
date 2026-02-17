@@ -5,6 +5,8 @@ import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreRequest;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResponse;
 import com.TalentForge.talentforge.applicant.dto.ResumeScoreHistoryItemResponse;
+import com.TalentForge.talentforge.applicant.dto.ResumeScoreTaskResponse;
+import com.TalentForge.talentforge.applicant.dto.ResumeScoreTaskSubmitResponse;
 import com.TalentForge.talentforge.applicant.service.ApplicantService;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import jakarta.validation.Valid;
@@ -61,6 +63,40 @@ public class ApplicantController {
                 .success(true)
                 .message("Resume score history fetched")
                 .data(applicantService.getResumeScoreHistory(authentication.getName()))
+                .build());
+    }
+
+    @PostMapping(value = "/resume-score/submit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ResumeScoreTaskSubmitResponse>> submitResumeScoreTask(
+            @ModelAttribute ApplicantResumeScoreRequest request,
+            @RequestPart("resumeFile") MultipartFile resumeFile,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.<ResumeScoreTaskSubmitResponse>builder()
+                .success(true)
+                .message("Resume parsing task submitted")
+                .data(applicantService.submitResumeScoreTask(authentication.getName(), request, resumeFile))
+                .build());
+    }
+
+    @GetMapping("/resume-score/tasks")
+    public ResponseEntity<ApiResponse<List<ResumeScoreTaskResponse>>> getResumeScoreTasks(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.<List<ResumeScoreTaskResponse>>builder()
+                .success(true)
+                .message("Resume score tasks fetched")
+                .data(applicantService.getResumeScoreTasks(authentication.getName()))
+                .build());
+    }
+
+    @GetMapping("/resume-score/tasks/{taskId}")
+    public ResponseEntity<ApiResponse<ResumeScoreTaskResponse>> getResumeScoreTask(
+            @PathVariable Long taskId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(ApiResponse.<ResumeScoreTaskResponse>builder()
+                .success(true)
+                .message("Resume score task fetched")
+                .data(applicantService.getResumeScoreTask(authentication.getName(), taskId))
                 .build());
     }
 

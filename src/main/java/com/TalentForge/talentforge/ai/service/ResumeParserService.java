@@ -22,7 +22,15 @@ public class ResumeParserService {
         }
 
         byte[] bytes = file.getBytes();
-        String directDecode = decodeTextFallback(file, bytes);
+        return extractText(file.getOriginalFilename(), file.getContentType(), bytes);
+    }
+
+    public String extractText(String fileName, String contentType, byte[] bytes) throws IOException {
+        if (bytes == null || bytes.length == 0) {
+            return "";
+        }
+
+        String directDecode = decodeTextFallback(fileName, contentType, bytes);
         if (!directDecode.isBlank()) {
             return directDecode;
         }
@@ -33,10 +41,10 @@ public class ResumeParserService {
                 return parsed;
             }
 
-            return decodeTextFallback(file, bytes);
+            return decodeTextFallback(fileName, contentType, bytes);
         } catch (Exception ex) {
             try {
-                return decodeTextFallback(file, bytes);
+                return decodeTextFallback(fileName, contentType, bytes);
             } catch (Exception fallbackEx) {
                 throw new IOException("Failed to parse resume file", ex);
             }
@@ -55,8 +63,7 @@ public class ResumeParserService {
                 .trim();
     }
 
-    private boolean looksTextLike(MultipartFile file) {
-        String contentType = file.getContentType();
+    private boolean looksTextLike(String fileName, String contentType) {
         if (contentType != null) {
             String normalized = contentType.toLowerCase(Locale.ROOT);
             if (normalized.startsWith("text/")) {
@@ -67,19 +74,18 @@ public class ResumeParserService {
             }
         }
 
-        String name = file.getOriginalFilename();
-        if (name == null) {
+        if (fileName == null) {
             return false;
         }
-        String lower = name.toLowerCase(Locale.ROOT);
+        String lower = fileName.toLowerCase(Locale.ROOT);
         return lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".rtf");
     }
 
-    private String decodeTextFallback(MultipartFile file, byte[] bytes) {
+    private String decodeTextFallback(String fileName, String contentType, byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return "";
         }
-        if (!looksTextLike(file)) {
+        if (!looksTextLike(fileName, contentType)) {
             return "";
         }
 
