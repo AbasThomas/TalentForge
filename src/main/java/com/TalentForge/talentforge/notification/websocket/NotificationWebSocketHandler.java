@@ -6,6 +6,7 @@ import com.TalentForge.talentforge.security.JwtService;
 import com.TalentForge.talentforge.user.entity.User;
 import com.TalentForge.talentforge.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -32,7 +33,9 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = JsonMapper.builder()
+            .findAndAddModules()
+            .build();
 
     private final Map<Long, Set<WebSocketSession>> userSessions = new ConcurrentHashMap<>();
     private final Map<String, Long> sessionToUser = new ConcurrentHashMap<>();

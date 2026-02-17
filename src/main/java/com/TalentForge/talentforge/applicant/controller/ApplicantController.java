@@ -4,6 +4,7 @@ import com.TalentForge.talentforge.applicant.dto.ApplicantRequest;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreRequest;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResponse;
+import com.TalentForge.talentforge.applicant.dto.ResumeScoreHistoryItemResponse;
 import com.TalentForge.talentforge.applicant.service.ApplicantService;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import jakarta.validation.Valid;
@@ -51,6 +52,15 @@ public class ApplicantController {
                 .success(true)
                 .message("Resume scored")
                 .data(applicantService.scoreResume(authentication.getName(), request, resumeFile))
+                .build());
+    }
+
+    @GetMapping("/resume-score/history")
+    public ResponseEntity<ApiResponse<List<ResumeScoreHistoryItemResponse>>> getResumeScoreHistory(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.<List<ResumeScoreHistoryItemResponse>>builder()
+                .success(true)
+                .message("Resume score history fetched")
+                .data(applicantService.getResumeScoreHistory(authentication.getName()))
                 .build());
     }
 

@@ -7,9 +7,12 @@ import com.TalentForge.talentforge.applicant.dto.ApplicantRequest;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreRequest;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResponse;
+import com.TalentForge.talentforge.applicant.dto.ResumeScoreHistoryItemResponse;
 import com.TalentForge.talentforge.applicant.entity.Applicant;
+import com.TalentForge.talentforge.applicant.entity.ResumeScoreHistory;
 import com.TalentForge.talentforge.applicant.mapper.ApplicantMapper;
 import com.TalentForge.talentforge.applicant.repository.ApplicantRepository;
+import com.TalentForge.talentforge.applicant.repository.ResumeScoreHistoryRepository;
 import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
 import com.TalentForge.talentforge.notification.entity.NotificationType;
@@ -44,6 +47,7 @@ public class ApplicantServiceImpl implements ApplicantService {
     private final UserRepository userRepository;
     private final SubscriptionLimitService subscriptionLimitService;
     private final NotificationService notificationService;
+    private final ResumeScoreHistoryRepository resumeScoreHistoryRepository;
 
     @Override
     public ApplicantResponse create(ApplicantRequest request) {
@@ -127,7 +131,8 @@ public class ApplicantServiceImpl implements ApplicantService {
         }
 
         if (resumeText.isBlank()) {
-            throw new BadRequestException("Could not extract readable text from resume");
+            processingLogs.add(stageLog("RESUME_EMPTY", "No readable text extracted from resume. Using metadata/context fallback."));
+            resumeText = truncate(buildUnreadableResumeFallback(resumeFile), MAX_RESUME_CHARS);
         }
         processingLogs.add(stageLog("RESUME_PARSED", "Extracted characters: " + resumeText.length()));
 
@@ -145,6 +150,7 @@ public class ApplicantServiceImpl implements ApplicantService {
                 ? "Talentforge AI returned a score without additional reasoning."
                 : truncate(scoreResult.reason(), 900);
         String keywords = scoreResult.matchingKeywords() == null ? "" : truncate(scoreResult.matchingKeywords(), 1200);
+        LocalDateTime analyzedAt = LocalDateTime.now();
         processingLogs.add(stageLog("AI_SCORED", "Talentforge AI score computed: " + boundedScore));
 
         if (applicant != null) {
@@ -153,7 +159,7 @@ public class ApplicantServiceImpl implements ApplicantService {
             aiAnalysis.put("score", boundedScore);
             aiAnalysis.put("skills", keywords);
             aiAnalysis.put("reasoning", reason);
-            aiAnalysis.put("processedAt", LocalDateTime.now().toString());
+            aiAnalysis.put("processedAt", analyzedAt.toString());
             aiAnalysis.put("source", "candidate_resume_score");
             aiAnalysis.put("parsedCharacters", resumeText.length());
             aiAnalysis.put("fileName", resumeFile.getOriginalFilename());
@@ -168,12 +174,25 @@ public class ApplicantServiceImpl implements ApplicantService {
             subscriptionLimitService.incrementCandidateResumeScoreUsage(user);
         }
 
+        ResumeScoreHistory history = ResumeScoreHistory.builder()
+                .user(user)
+                .score(boundedScore)
+                .reason(reason)
+                .matchingKeywords(keywords)
+                .parsedCharacters(resumeText.length())
+                .source("Talentforge AI")
+                .usedApplicantProfile(applicant != null)
+                .fileName(truncate(resumeFile.getOriginalFilename(), 255))
+                .targetRole(truncate(request == null ? null : request.getTargetRole(), 140))
+                .build();
+        resumeScoreHistoryRepository.save(history);
+
         String notificationLink = user.getRole() == UserRole.CANDIDATE ? "/candidate/resume-ai" : "/recruiter/candidates";
         notificationService.createForUser(
                 user.getId(),
-                NotificationType.RESUME_SCORE_SUCCESS,
-                "Resume parsing successful",
-                "Resume was parsed and scored successfully. Latest score: " + boundedScore + ".",
+                NotificationType.RESUME_PARSED_SUCCESS,
+                "Resume parsing completed",
+                "Resume parsing and scoring completed successfully. Latest score: " + boundedScore + ".",
                 notificationLink
         );
 
@@ -184,9 +203,24 @@ public class ApplicantServiceImpl implements ApplicantService {
                 resumeText.length(),
                 "Talentforge AI",
                 applicant != null,
-                LocalDateTime.now(),
+                analyzedAt,
                 processingLogs
         );
+    }
+
+    @Override
+    public List<ResumeScoreHistoryItemResponse> getResumeScoreHistory(String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            throw new BadRequestException("Authenticated user email is required");
+        }
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found: " + userEmail));
+
+        return resumeScoreHistoryRepository.findTop100ByUserIdOrderByCreatedAtDesc(user.getId())
+                .stream()
+                .map(this::toResumeScoreHistoryItemResponse)
+                .toList();
     }
 
     private String buildJobContext(ApplicantResumeScoreRequest request, Applicant applicant) {
@@ -246,7 +280,35 @@ public class ApplicantServiceImpl implements ApplicantService {
         return cleaned.substring(0, maxChars);
     }
 
+    private String buildUnreadableResumeFallback(MultipartFile resumeFile) {
+        String name = resumeFile.getOriginalFilename() == null ? "unknown-file" : resumeFile.getOriginalFilename();
+        String contentType = resumeFile.getContentType() == null ? "unknown" : resumeFile.getContentType();
+        long size = resumeFile.getSize();
+
+        return "Resume parsing note:\n"
+                + "The uploaded resume appears to be image-based or has no machine-readable text.\n"
+                + "File name: " + name + "\n"
+                + "Content type: " + contentType + "\n"
+                + "File size bytes: " + size + "\n"
+                + "Use applicant profile, role description, and requirements to estimate fit.";
+    }
+
     private String stageLog(String stage, String detail) {
         return LocalDateTime.now() + " | " + stage + " | " + detail;
+    }
+
+    private ResumeScoreHistoryItemResponse toResumeScoreHistoryItemResponse(ResumeScoreHistory history) {
+        return new ResumeScoreHistoryItemResponse(
+                history.getId(),
+                history.getScore(),
+                history.getReason(),
+                history.getMatchingKeywords(),
+                history.getParsedCharacters(),
+                history.getSource(),
+                history.getUsedApplicantProfile(),
+                history.getFileName(),
+                history.getTargetRole(),
+                history.getCreatedAt()
+        );
     }
 }

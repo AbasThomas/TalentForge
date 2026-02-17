@@ -1,6 +1,7 @@
 package com.TalentForge.talentforge.applicant.service;
 
 import com.TalentForge.talentforge.applicant.dto.ApplicantRequest;
+import com.TalentForge.talentforge.applicant.dto.ResumeScoreHistoryItemResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreRequest;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResumeScoreResponse;
 import com.TalentForge.talentforge.applicant.dto.ApplicantResponse;
@@ -20,4 +21,6 @@ public interface ApplicantService {
     void delete(Long id);
 
     ApplicantResumeScoreResponse scoreResume(String userEmail, ApplicantResumeScoreRequest request, MultipartFile resumeFile);
+
+    List<ResumeScoreHistoryItemResponse> getResumeScoreHistory(String userEmail);
 }

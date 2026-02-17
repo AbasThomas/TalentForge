@@ -427,18 +427,18 @@ public class PaymentServiceImpl implements PaymentService {
     private PlanLimits resolvePlanLimits(PlanType planType, UserRole pricingRole) {
         if (pricingRole == UserRole.CANDIDATE) {
             return switch (planType) {
-                case FREE -> new PlanLimits(1, 25, 20, 50);
-                case BASIC -> new PlanLimits(3, 120, 80, 400);
-                case PRO -> new PlanLimits(8, 500, 250, 1500);
-                case ENTERPRISE -> new PlanLimits(null, null, null, null);
+                case FREE -> new PlanLimits(1, 25, 20, 20);
+                case BASIC -> new PlanLimits(3, 120, 80, 60);
+                case PRO -> new PlanLimits(8, 500, 250, 150);
+                case ENTERPRISE -> new PlanLimits(null, null, null, 400);
             };
         }
 
         return switch (planType) {
             case FREE -> new PlanLimits(3, 50, 10, 20);
-            case BASIC -> new PlanLimits(15, 400, 35, 100);
-            case PRO -> new PlanLimits(75, 3000, 180, 500);
-            case ENTERPRISE -> new PlanLimits(null, null, null, null);
+            case BASIC -> new PlanLimits(15, 400, 35, 60);
+            case PRO -> new PlanLimits(75, 3000, 180, 150);
+            case ENTERPRISE -> new PlanLimits(null, null, null, 400);
         };
     }
 
