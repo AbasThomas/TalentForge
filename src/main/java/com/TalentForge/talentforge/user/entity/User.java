@@ -52,6 +52,10 @@ public class User {
     @Column(nullable = false)
     private UserRole role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "secondary_role")
+    private UserRole secondaryRole;
+
     private String company;
 
     private String phone;
@@ -77,4 +81,45 @@ public class User {
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Subscription subscription;
+
+    public List<UserRole> getAvailableRoles() {
+        List<UserRole> roles = new ArrayList<>();
+        if (role != null) {
+            roles.add(role);
+        }
+        if (secondaryRole != null && secondaryRole != role) {
+            roles.add(secondaryRole);
+        }
+        return roles;
+    }
+
+    public boolean hasRole(UserRole targetRole) {
+        if (targetRole == null) {
+            return false;
+        }
+        return role == targetRole || secondaryRole == targetRole;
+    }
+
+    public void addRole(UserRole targetRole) {
+        if (targetRole == null || hasRole(targetRole)) {
+            return;
+        }
+        if (secondaryRole == null) {
+            secondaryRole = targetRole;
+            return;
+        }
+        throw new IllegalStateException("User already has two roles");
+    }
+
+    public void switchToRole(UserRole targetRole) {
+        if (targetRole == null || role == targetRole) {
+            return;
+        }
+        if (secondaryRole == targetRole) {
+            secondaryRole = role;
+            role = targetRole;
+            return;
+        }
+        throw new IllegalStateException("User does not have target role");
+    }
 }

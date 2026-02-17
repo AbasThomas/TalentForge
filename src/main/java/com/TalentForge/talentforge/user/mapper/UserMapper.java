@@ -13,6 +13,8 @@ public class UserMapper {
                 user.getEmail(),
                 user.getFullName(),
                 user.getRole(),
+                user.getSecondaryRole(),
+                user.getAvailableRoles(),
                 user.getCompany(),
                 user.getPhone(),
                 user.isActive(),

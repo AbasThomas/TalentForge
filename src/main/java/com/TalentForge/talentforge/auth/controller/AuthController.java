@@ -2,12 +2,15 @@ package com.TalentForge.talentforge.auth.controller;
 
 import com.TalentForge.talentforge.auth.dto.AuthRequest;
 import com.TalentForge.talentforge.auth.dto.AuthResponse;
+import com.TalentForge.talentforge.auth.dto.LoginRoleOptionsResponse;
 import com.TalentForge.talentforge.auth.dto.RegisterRequest;
+import com.TalentForge.talentforge.auth.dto.RoleSelectionRequest;
 import com.TalentForge.talentforge.auth.service.AuthService;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,6 +39,29 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
                 .success(true)
                 .message("Login successful")
+                .data(response)
+                .build());
+    }
+
+    @PostMapping("/login/roles")
+    public ResponseEntity<ApiResponse<LoginRoleOptionsResponse>> loginRoles(@Valid @RequestBody AuthRequest request) {
+        LoginRoleOptionsResponse response = authService.loginRoles(request);
+        return ResponseEntity.ok(ApiResponse.<LoginRoleOptionsResponse>builder()
+                .success(true)
+                .message("Available roles fetched")
+                .data(response)
+                .build());
+    }
+
+    @PostMapping("/switch-role")
+    public ResponseEntity<ApiResponse<AuthResponse>> switchRole(
+            Authentication authentication,
+            @Valid @RequestBody RoleSelectionRequest request
+    ) {
+        AuthResponse response = authService.switchRole(authentication.getName(), request.role());
+        return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
+                .success(true)
+                .message("Role switched successfully")
                 .data(response)
                 .build());
     }
