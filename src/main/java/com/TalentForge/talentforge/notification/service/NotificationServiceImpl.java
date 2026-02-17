@@ -7,6 +7,7 @@ import com.TalentForge.talentforge.notification.dto.NotificationResponse;
 import com.TalentForge.talentforge.notification.entity.Notification;
 import com.TalentForge.talentforge.notification.entity.NotificationType;
 import com.TalentForge.talentforge.notification.repository.NotificationRepository;
+import com.TalentForge.talentforge.notification.websocket.NotificationWebSocketHandler;
 import com.TalentForge.talentforge.user.entity.User;
 import com.TalentForge.talentforge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final NotificationWebSocketHandler notificationWebSocketHandler;
 
     @Override
     @Transactional(readOnly = true)
@@ -75,7 +77,10 @@ public class NotificationServiceImpl implements NotificationService {
                 .link(trimToLength(link, 255))
                 .read(false)
                 .build();
-        notificationRepository.save(notification);
+        Notification saved = notificationRepository.saveAndFlush(notification);
+
+        long unreadCount = notificationRepository.countByUserIdAndReadFalse(userId);
+        notificationWebSocketHandler.pushNotification(userId, toResponse(saved), unreadCount);
     }
 
     private NotificationResponse toResponse(Notification notification) {
