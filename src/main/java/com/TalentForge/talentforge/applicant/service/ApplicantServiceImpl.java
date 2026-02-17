@@ -12,6 +12,8 @@ import com.TalentForge.talentforge.applicant.mapper.ApplicantMapper;
 import com.TalentForge.talentforge.applicant.repository.ApplicantRepository;
 import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
+import com.TalentForge.talentforge.notification.entity.NotificationType;
+import com.TalentForge.talentforge.notification.service.NotificationService;
 import com.TalentForge.talentforge.subscription.service.SubscriptionLimitService;
 import com.TalentForge.talentforge.user.entity.User;
 import com.TalentForge.talentforge.user.entity.UserRole;
@@ -41,6 +43,7 @@ public class ApplicantServiceImpl implements ApplicantService {
     private final AiAssistantService aiAssistantService;
     private final UserRepository userRepository;
     private final SubscriptionLimitService subscriptionLimitService;
+    private final NotificationService notificationService;
 
     @Override
     public ApplicantResponse create(ApplicantRequest request) {
@@ -164,6 +167,15 @@ public class ApplicantServiceImpl implements ApplicantService {
         if (user.getRole() == UserRole.CANDIDATE) {
             subscriptionLimitService.incrementCandidateResumeScoreUsage(user);
         }
+
+        String notificationLink = user.getRole() == UserRole.CANDIDATE ? "/candidate/resume-ai" : "/recruiter/candidates";
+        notificationService.createForUser(
+                user.getId(),
+                NotificationType.RESUME_SCORE_SUCCESS,
+                "Resume parsing successful",
+                "Resume was parsed and scored successfully. Latest score: " + boundedScore + ".",
+                notificationLink
+        );
 
         return new ApplicantResumeScoreResponse(
                 boundedScore,

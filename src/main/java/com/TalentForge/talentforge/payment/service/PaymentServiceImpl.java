@@ -12,6 +12,8 @@ import com.TalentForge.talentforge.payment.entity.PaymentCurrency;
 import com.TalentForge.talentforge.payment.entity.PaymentStatus;
 import com.TalentForge.talentforge.payment.entity.PaymentTransaction;
 import com.TalentForge.talentforge.payment.repository.PaymentTransactionRepository;
+import com.TalentForge.talentforge.notification.entity.NotificationType;
+import com.TalentForge.talentforge.notification.service.NotificationService;
 import com.TalentForge.talentforge.subscription.entity.PlanType;
 import com.TalentForge.talentforge.subscription.entity.Subscription;
 import com.TalentForge.talentforge.subscription.repository.SubscriptionRepository;
@@ -81,6 +83,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -334,6 +337,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         PaymentTransaction transaction = paymentTransactionRepository.findByReference(reference)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment reference not found: " + reference));
+        boolean wasAlreadySuccessful = transaction.getStatus() == PaymentStatus.SUCCESS;
 
         String gatewayStatus = readText(data, "status");
         String normalizedStatus = gatewayStatus == null ? "" : gatewayStatus.trim().toLowerCase();
@@ -369,6 +373,18 @@ public class PaymentServiceImpl implements PaymentService {
                 transaction.setPaidAt(LocalDateTime.now());
             }
             applySubscriptionForSuccessfulPayment(transaction);
+            if (!wasAlreadySuccessful) {
+                String portalPath = transaction.getUser().getRole() == UserRole.CANDIDATE
+                        ? "/candidate/subscription"
+                        : "/recruiter/subscription";
+                notificationService.createForUser(
+                        transaction.getUser().getId(),
+                        NotificationType.PAYMENT_SUCCESS,
+                        "Payment successful",
+                        "Payment for " + transaction.getPlanType().name() + " (" + transaction.getBillingCycle().name() + ") completed successfully.",
+                        portalPath
+                );
+            }
         } else if ("abandoned".equals(normalizedStatus)) {
             if (transaction.getStatus() != PaymentStatus.SUCCESS) {
                 transaction.setStatus(PaymentStatus.ABANDONED);

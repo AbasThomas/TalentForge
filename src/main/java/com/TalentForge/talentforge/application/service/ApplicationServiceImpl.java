@@ -15,6 +15,8 @@ import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
 import com.TalentForge.talentforge.job.entity.Job;
 import com.TalentForge.talentforge.job.repository.JobRepository;
+import com.TalentForge.talentforge.notification.entity.NotificationType;
+import com.TalentForge.talentforge.notification.service.NotificationService;
 import com.TalentForge.talentforge.subscription.service.SubscriptionLimitService;
 import com.TalentForge.talentforge.user.entity.User;
 import com.TalentForge.talentforge.user.entity.UserRole;
@@ -54,6 +56,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final AiAssistantService aiAssistantService;
     private final UserRepository userRepository;
     private final SubscriptionLimitService subscriptionLimitService;
+    private final NotificationService notificationService;
 
     @Override
     public ApplicationResponse submit(ApplicationCreateRequest request, MultipartFile resumeFile, String userEmail) {
@@ -105,6 +108,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .build();
 
         String parsedResumeText = "";
+        boolean resumeParsedSuccessfully = false;
         if (resumeFile != null && !resumeFile.isEmpty()) {
             try {
                 processingLogs.add(stageLog("RESUME_RECEIVED", "File accepted: " + resumeFile.getOriginalFilename()));
@@ -113,6 +117,7 @@ public class ApplicationServiceImpl implements ApplicationService {
 
                 parsedResumeText = truncate(resumeParserService.extractText(resumeFile), MAX_RESUME_CHARS);
                 processingLogs.add(stageLog("RESUME_PARSED", "Extracted characters: " + parsedResumeText.length()));
+                resumeParsedSuccessfully = !parsedResumeText.isBlank();
 
                 application.setResumeFileName(resumeFile.getOriginalFilename());
                 application.setResumeFilePath(resumePath);
@@ -136,6 +141,38 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (currentUser != null && currentUser.getRole() == UserRole.CANDIDATE) {
             subscriptionLimitService.incrementCandidateApplicationUsage(currentUser);
         }
+
+        if (job.getRecruiter() != null) {
+            notificationService.createForUser(
+                    job.getRecruiter().getId(),
+                    NotificationType.NEW_APPLICANT,
+                    "New applicant received",
+                    applicant.getFullName() + " applied for \"" + job.getTitle() + "\".",
+                    "/recruiter/applications"
+            );
+        }
+
+        if (currentUser != null) {
+            String actorLink = currentUser.getRole() == UserRole.CANDIDATE ? "/candidate/applications" : "/recruiter/applications";
+            notificationService.createForUser(
+                    currentUser.getId(),
+                    NotificationType.APPLICATION_SUBMITTED,
+                    "Application submitted",
+                    "Your application for \"" + job.getTitle() + "\" was submitted successfully.",
+                    actorLink
+            );
+
+            if (resumeParsedSuccessfully) {
+                notificationService.createForUser(
+                        currentUser.getId(),
+                        NotificationType.RESUME_PARSED_SUCCESS,
+                        "Resume parsing successful",
+                        "Your resume was parsed successfully for \"" + job.getTitle() + "\".",
+                        actorLink
+                );
+            }
+        }
+
         return response;
     }
 
