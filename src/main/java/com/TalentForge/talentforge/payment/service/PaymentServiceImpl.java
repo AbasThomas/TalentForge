@@ -44,7 +44,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -67,10 +66,16 @@ public class PaymentServiceImpl implements PaymentService {
             "eft"
     );
 
-    private static final Map<PlanType, Map<BillingCycle, Long>> PLAN_USD_PRICE_MINOR = Map.of(
+    private static final Map<PlanType, Map<BillingCycle, Long>> RECRUITER_PLAN_USD_PRICE_MINOR = Map.of(
             PlanType.BASIC, Map.of(BillingCycle.MONTHLY, 1900L, BillingCycle.ANNUAL, 18000L),
             PlanType.PRO, Map.of(BillingCycle.MONTHLY, 4900L, BillingCycle.ANNUAL, 48000L),
             PlanType.ENTERPRISE, Map.of(BillingCycle.MONTHLY, 19900L)
+    );
+
+    private static final Map<PlanType, Map<BillingCycle, Long>> CANDIDATE_PLAN_USD_PRICE_MINOR = Map.of(
+            PlanType.BASIC, Map.of(BillingCycle.MONTHLY, 600L, BillingCycle.ANNUAL, 5800L),
+            PlanType.PRO, Map.of(BillingCycle.MONTHLY, 1200L, BillingCycle.ANNUAL, 11500L),
+            PlanType.ENTERPRISE, Map.of(BillingCycle.MONTHLY, 3900L, BillingCycle.ANNUAL, 37400L)
     );
 
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -124,15 +129,17 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(readOnly = true)
     public PaymentOptionsResponse getOptions() {
+        User currentUser = getAuthenticatedUserOptional();
+        UserRole pricingRole = resolvePricingRole(currentUser);
         List<String> channels = resolveChannels(null);
         List<PaymentCurrency> currencies = resolveSupportedCurrencies();
         List<PaymentOptionsResponse.PaymentPriceOption> prices = new ArrayList<>();
 
         for (PlanType planType : List.of(PlanType.BASIC, PlanType.PRO, PlanType.ENTERPRISE)) {
-            PlanLimits limits = resolvePlanLimits(planType);
+            PlanLimits limits = resolvePlanLimits(planType, pricingRole);
             for (BillingCycle cycle : BillingCycle.values()) {
                 for (PaymentCurrency currency : currencies) {
-                    Long amountUsdMinor = resolveUsdMinorAmount(planType, cycle);
+                    Long amountUsdMinor = resolveUsdMinorAmount(planType, cycle, pricingRole);
                     if (amountUsdMinor == null) {
                         prices.add(new PaymentOptionsResponse.PaymentPriceOption(
                                 planType,
@@ -181,7 +188,8 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("Free plan does not require payment");
         }
 
-        Long amountUsdMinor = resolveUsdMinorAmount(request.planType(), request.billingCycle());
+        UserRole pricingRole = resolvePricingRole(currentUser);
+        Long amountUsdMinor = resolveUsdMinorAmount(request.planType(), request.billingCycle(), pricingRole);
         if (amountUsdMinor == null) {
             throw new BadRequestException("Selected plan and billing cycle requires a custom quote");
         }
@@ -378,7 +386,7 @@ public class PaymentServiceImpl implements PaymentService {
         Subscription subscription = subscriptionRepository.findByUserId(transaction.getUser().getId())
                 .orElse(Subscription.builder().user(transaction.getUser()).build());
 
-        PlanLimits limits = resolvePlanLimits(transaction.getPlanType());
+        PlanLimits limits = resolvePlanLimits(transaction.getPlanType(), resolvePricingRole(transaction.getUser()));
         LocalDateTime startDate = transaction.getPaidAt() == null ? LocalDateTime.now() : transaction.getPaidAt();
         LocalDateTime endDate = switch (transaction.getBillingCycle()) {
             case MONTHLY -> startDate.plusMonths(1);
@@ -400,7 +408,16 @@ public class PaymentServiceImpl implements PaymentService {
         subscriptionRepository.save(subscription);
     }
 
-    private PlanLimits resolvePlanLimits(PlanType planType) {
+    private PlanLimits resolvePlanLimits(PlanType planType, UserRole pricingRole) {
+        if (pricingRole == UserRole.CANDIDATE) {
+            return switch (planType) {
+                case FREE -> new PlanLimits(1, 25, 20, 50);
+                case BASIC -> new PlanLimits(3, 120, 80, 400);
+                case PRO -> new PlanLimits(8, 500, 250, 1500);
+                case ENTERPRISE -> new PlanLimits(null, null, null, null);
+            };
+        }
+
         return switch (planType) {
             case FREE -> new PlanLimits(3, 50, 10, 20);
             case BASIC -> new PlanLimits(15, 400, 35, 100);
@@ -417,12 +434,23 @@ public class PaymentServiceImpl implements PaymentService {
     ) {
     }
 
-    private Long resolveUsdMinorAmount(PlanType planType, BillingCycle cycle) {
-        Map<BillingCycle, Long> byCycle = PLAN_USD_PRICE_MINOR.get(planType);
+    private Long resolveUsdMinorAmount(PlanType planType, BillingCycle cycle, UserRole pricingRole) {
+        Map<PlanType, Map<BillingCycle, Long>> source = pricingRole == UserRole.CANDIDATE
+                ? CANDIDATE_PLAN_USD_PRICE_MINOR
+                : RECRUITER_PLAN_USD_PRICE_MINOR;
+
+        Map<BillingCycle, Long> byCycle = source.get(planType);
         if (byCycle == null) {
             return null;
         }
         return byCycle.get(cycle);
+    }
+
+    private UserRole resolvePricingRole(User user) {
+        if (user == null) {
+            return UserRole.RECRUITER;
+        }
+        return user.getRole() == UserRole.CANDIDATE ? UserRole.CANDIDATE : UserRole.RECRUITER;
     }
 
     private long convertUsdMinor(long usdMinor, PaymentCurrency currency) {
@@ -719,6 +747,20 @@ public class PaymentServiceImpl implements PaymentService {
 
         return userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new AccessDeniedException("Authenticated user not found"));
+    }
+
+    private User getAuthenticatedUserOptional() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+
+        String principal = authentication.getName();
+        if (isBlank(principal) || "anonymousUser".equalsIgnoreCase(principal)) {
+            return null;
+        }
+
+        return userRepository.findByEmail(principal).orElse(null);
     }
 
     private void assertPaymentAllowedRole(User user) {

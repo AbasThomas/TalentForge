@@ -1,6 +1,7 @@
 package com.TalentForge.talentforge.job.service;
 
 import com.TalentForge.talentforge.ai.service.AiAssistantService;
+import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
 import com.TalentForge.talentforge.job.dto.JobRequest;
 import com.TalentForge.talentforge.job.dto.JobResponse;
@@ -10,8 +11,12 @@ import com.TalentForge.talentforge.job.mapper.JobMapper;
 import com.TalentForge.talentforge.job.repository.JobRepository;
 import com.TalentForge.talentforge.subscription.service.SubscriptionLimitService;
 import com.TalentForge.talentforge.user.entity.User;
+import com.TalentForge.talentforge.user.entity.UserRole;
 import com.TalentForge.talentforge.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,8 +35,14 @@ public class JobServiceImpl implements JobService {
 
     @Override
     public JobResponse create(JobRequest request) {
+        User actor = getAuthenticatedUser();
+        assertOwnershipOrAdmin(actor, request.recruiterId());
+
         User recruiter = userRepository.findById(request.recruiterId())
                 .orElseThrow(() -> new ResourceNotFoundException("Recruiter not found: " + request.recruiterId()));
+        if (!recruiter.isActive()) {
+            throw new BadRequestException("Inactive users cannot create jobs");
+        }
         subscriptionLimitService.ensureRecruiterCanPostJob(recruiter.getId());
 
         Job job = Job.builder()
@@ -59,6 +70,9 @@ public class JobServiceImpl implements JobService {
 
     @Override
     public JobResponse update(Long id, JobRequest request) {
+        User actor = getAuthenticatedUser();
+        assertOwnershipOrAdmin(actor, request.recruiterId());
+
         Job job = jobRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Job not found: " + id));
 
@@ -110,6 +124,29 @@ public class JobServiceImpl implements JobService {
     public void delete(Long id) {
         Job job = jobRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Job not found: " + id));
+
+        User actor = getAuthenticatedUser();
+        assertOwnershipOrAdmin(actor, job.getRecruiter().getId());
+
         jobRepository.delete(job);
+    }
+
+    private User getAuthenticatedUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new AccessDeniedException("Authenticated user not found"));
+    }
+
+    private void assertOwnershipOrAdmin(User actor, Long ownerId) {
+        if (actor.getRole() == UserRole.ADMIN) {
+            return;
+        }
+        if (!actor.getId().equals(ownerId)) {
+            throw new AccessDeniedException("You can only manage jobs for your own account");
+        }
     }
 }
