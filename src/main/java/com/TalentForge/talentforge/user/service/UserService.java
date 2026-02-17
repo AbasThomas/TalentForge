@@ -15,6 +15,12 @@ public interface UserService {
 
     UserResponse deactivate(Long id);
 
+    UserResponse activate(Long id);
+
+    UserResponse setVerified(Long id, boolean verified);
+
+    List<UserResponse> bulkSetVerified(List<Long> userIds, boolean verified);
+
     UserResponse getCurrentUser(String email);
 
     UserResponse updateCurrentUser(String email, UserUpdateRequest request);

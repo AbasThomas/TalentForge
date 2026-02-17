@@ -1,0 +1,6 @@
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+
+UPDATE users
+SET verified = TRUE
+WHERE role = 'ADMIN';

@@ -1,9 +1,13 @@
 package com.TalentForge.talentforge.applicant.dto;
 
+import com.TalentForge.talentforge.applicant.entity.ResumeScoreTaskStatus;
+
 import java.time.LocalDateTime;
 
 public record ResumeScoreHistoryItemResponse(
         Long id,
+        Long taskId,
+        ResumeScoreTaskStatus taskStatus,
         Double score,
         String reason,
         String matchingKeywords,

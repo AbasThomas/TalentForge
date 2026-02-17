@@ -15,6 +15,7 @@ public record UserResponse(
         String company,
         String phone,
         boolean active,
+        boolean verified,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

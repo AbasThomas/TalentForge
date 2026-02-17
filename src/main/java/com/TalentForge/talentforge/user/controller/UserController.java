@@ -1,6 +1,7 @@
 package com.TalentForge.talentforge.user.controller;
 
 import com.TalentForge.talentforge.common.payload.ApiResponse;
+import com.TalentForge.talentforge.user.dto.UserBulkVerifyRequest;
 import com.TalentForge.talentforge.user.dto.UserCreateRequest;
 import com.TalentForge.talentforge.user.dto.UserResponse;
 import com.TalentForge.talentforge.user.dto.UserUpdateRequest;
@@ -80,6 +81,42 @@ public class UserController {
                 .success(true)
                 .message("User deactivated")
                 .data(userService.deactivate(id))
+                .build());
+    }
+
+    @PostMapping("/{id}/activate")
+    public ResponseEntity<ApiResponse<UserResponse>> activate(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.<UserResponse>builder()
+                .success(true)
+                .message("User activated")
+                .data(userService.activate(id))
+                .build());
+    }
+
+    @PostMapping("/{id}/verify")
+    public ResponseEntity<ApiResponse<UserResponse>> verify(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.<UserResponse>builder()
+                .success(true)
+                .message("User verified")
+                .data(userService.setVerified(id, true))
+                .build());
+    }
+
+    @PostMapping("/{id}/unverify")
+    public ResponseEntity<ApiResponse<UserResponse>> unverify(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.<UserResponse>builder()
+                .success(true)
+                .message("User verification removed")
+                .data(userService.setVerified(id, false))
+                .build());
+    }
+
+    @PostMapping("/verify/bulk")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> bulkVerify(@Valid @RequestBody UserBulkVerifyRequest request) {
+        return ResponseEntity.ok(ApiResponse.<List<UserResponse>>builder()
+                .success(true)
+                .message(request.verified() ? "Users verified" : "Users unverified")
+                .data(userService.bulkSetVerified(request.userIds(), request.verified()))
                 .build());
     }
 }

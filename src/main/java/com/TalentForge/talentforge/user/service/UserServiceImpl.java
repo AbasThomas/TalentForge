@@ -1,6 +1,8 @@
 package com.TalentForge.talentforge.user.service;
 
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
+import com.TalentForge.talentforge.notification.entity.NotificationType;
+import com.TalentForge.talentforge.notification.service.NotificationService;
 import com.TalentForge.talentforge.user.dto.UserCreateRequest;
 import com.TalentForge.talentforge.user.dto.UserResponse;
 import com.TalentForge.talentforge.user.dto.UserUpdateRequest;
@@ -21,6 +23,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
     @Override
     public UserResponse create(UserCreateRequest request) {
@@ -54,7 +57,61 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
         user.setActive(false);
-        return userMapper.toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        notificationService.createForUser(
+                saved.getId(),
+                NotificationType.SYSTEM,
+                "Account suspended",
+                "Your TalentForge account has been suspended by an administrator.",
+                "/login"
+        );
+        return userMapper.toResponse(saved);
+    }
+
+    @Override
+    public UserResponse activate(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+        user.setActive(true);
+        User saved = userRepository.save(user);
+        notificationService.createForUser(
+                saved.getId(),
+                NotificationType.SYSTEM,
+                "Account activated",
+                "Your TalentForge account has been reactivated by an administrator.",
+                "/dashboard"
+        );
+        return userMapper.toResponse(saved);
+    }
+
+    @Override
+    public UserResponse setVerified(Long id, boolean verified) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+        user.setVerified(verified);
+        User saved = userRepository.save(user);
+        notificationService.createForUser(
+                saved.getId(),
+                NotificationType.SYSTEM,
+                verified ? "Account verified" : "Verification removed",
+                verified
+                        ? "Your TalentForge account is now verified for promotional repost eligibility."
+                        : "Your promotional repost verification has been removed.",
+                "/dashboard"
+        );
+        return userMapper.toResponse(saved);
+    }
+
+    @Override
+    public List<UserResponse> bulkSetVerified(List<Long> userIds, boolean verified) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+
+        return userIds.stream()
+                .distinct()
+                .map(userId -> setVerified(userId, verified))
+                .toList();
     }
 
     @Override

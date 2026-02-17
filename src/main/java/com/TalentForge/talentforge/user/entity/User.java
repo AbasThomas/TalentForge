@@ -72,6 +72,9 @@ public class User {
     private boolean active = true;
 
     @Builder.Default
+    private boolean verified = false;
+
+    @Builder.Default
     @OneToMany(mappedBy = "recruiter", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Job> jobs = new ArrayList<>();
 

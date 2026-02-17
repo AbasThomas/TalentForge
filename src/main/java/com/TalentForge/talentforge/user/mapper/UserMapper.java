@@ -18,6 +18,7 @@ public class UserMapper {
                 user.getCompany(),
                 user.getPhone(),
                 user.isActive(),
+                user.isVerified(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );

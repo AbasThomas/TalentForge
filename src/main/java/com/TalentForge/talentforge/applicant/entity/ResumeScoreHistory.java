@@ -36,6 +36,10 @@ public class ResumeScoreHistory {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resume_score_task_id")
+    private ResumeScoreTask resumeScoreTask;
+
     private Double score;
 
     @Column(columnDefinition = "TEXT")
