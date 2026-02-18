@@ -1,6 +1,7 @@
 package com.TalentForge.talentforge.user.service;
 
 import com.TalentForge.talentforge.common.exception.ResourceNotFoundException;
+import com.TalentForge.talentforge.common.exception.BadRequestException;
 import com.TalentForge.talentforge.notification.entity.NotificationType;
 import com.TalentForge.talentforge.notification.service.NotificationService;
 import com.TalentForge.talentforge.user.dto.UserCreateRequest;
@@ -112,6 +113,42 @@ public class UserServiceImpl implements UserService {
                 .distinct()
                 .map(userId -> setVerified(userId, verified))
                 .toList();
+    }
+
+    @Override
+    public UserResponse switchRole(Long id, UserRole targetRole, boolean addIfMissing) {
+        if (targetRole == null) {
+            throw new BadRequestException("Role is required");
+        }
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+
+        if (!user.hasRole(targetRole)) {
+            if (!addIfMissing) {
+                throw new BadRequestException("Selected role is not linked to this account");
+            }
+
+            try {
+                user.addRole(targetRole);
+            } catch (IllegalStateException ex) {
+                throw new BadRequestException("Account already has the maximum number of roles");
+            }
+        }
+
+        if (user.getRole() != targetRole) {
+            user.switchToRole(targetRole);
+        }
+
+        User saved = userRepository.save(user);
+        notificationService.createForUser(
+                saved.getId(),
+                NotificationType.SYSTEM,
+                "Active role switched",
+                "Your active TalentForge role is now " + targetRole.name() + ".",
+                "/dashboard"
+        );
+        return userMapper.toResponse(saved);
     }
 
     @Override

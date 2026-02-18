@@ -3,6 +3,7 @@ package com.TalentForge.talentforge.user.controller;
 import com.TalentForge.talentforge.common.payload.ApiResponse;
 import com.TalentForge.talentforge.user.dto.UserBulkVerifyRequest;
 import com.TalentForge.talentforge.user.dto.UserCreateRequest;
+import com.TalentForge.talentforge.user.dto.UserRoleSwitchRequest;
 import com.TalentForge.talentforge.user.dto.UserResponse;
 import com.TalentForge.talentforge.user.dto.UserUpdateRequest;
 import com.TalentForge.talentforge.user.service.UserService;
@@ -117,6 +118,19 @@ public class UserController {
                 .success(true)
                 .message(request.verified() ? "Users verified" : "Users unverified")
                 .data(userService.bulkSetVerified(request.userIds(), request.verified()))
+                .build());
+    }
+
+    @PostMapping("/{id}/switch-role")
+    public ResponseEntity<ApiResponse<UserResponse>> switchRole(
+            @PathVariable Long id,
+            @Valid @RequestBody UserRoleSwitchRequest request
+    ) {
+        boolean addIfMissing = Boolean.TRUE.equals(request.addIfMissing());
+        return ResponseEntity.ok(ApiResponse.<UserResponse>builder()
+                .success(true)
+                .message("User active role switched")
+                .data(userService.switchRole(id, request.role(), addIfMissing))
                 .build());
     }
 }
