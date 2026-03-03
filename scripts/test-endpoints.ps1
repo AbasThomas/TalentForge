@@ -1,5 +1,10 @@
-﻿$ErrorActionPreference = 'Stop'
-$base = 'http://localhost:8090/api/v1'
+param(
+  [string]$BaseUrl = $(if ($env:TF_API_BASE_URL) { $env:TF_API_BASE_URL } else { 'http://localhost:8090/api/v1' }),
+  [int]$CurlMaxTimeSeconds = $(if ($env:TF_CURL_MAX_TIME_SECONDS) { [int]$env:TF_CURL_MAX_TIME_SECONDS } else { 25 })
+)
+
+$ErrorActionPreference = 'Stop'
+$base = $BaseUrl.TrimEnd('/')
 $results = New-Object System.Collections.Generic.List[object]
 
 function Add-Result($name,$expected,$actual,$ok,$detail){
@@ -16,7 +21,7 @@ function Invoke-CurlJson {
     [int[]]$ExpectedCodes
   )
   $tmp = [System.IO.Path]::GetTempFileName()
-  $args = @('-s','--max-time','25','-o',$tmp,'-w','%{http_code}','-X',$Method,$Url,'-H','Content-Type: application/json')
+  $args = @('-s','--max-time',"$CurlMaxTimeSeconds",'-o',$tmp,'-w','%{http_code}','-X',$Method,$Url,'-H','Content-Type: application/json')
   if($Token){ $args += @('-H',"Authorization: Bearer $Token") }
   $bodyFile = $null
   if($Body){
@@ -44,7 +49,7 @@ function Invoke-CurlForm {
     [int[]]$ExpectedCodes
   )
   $tmp = [System.IO.Path]::GetTempFileName()
-  $args = @('-s','--max-time','25','-o',$tmp,'-w','%{http_code}','-X','POST',$Url)
+  $args = @('-s','--max-time',"$CurlMaxTimeSeconds",'-o',$tmp,'-w','%{http_code}','-X','POST',$Url)
   if($Token){ $args += @('-H',"Authorization: Bearer $Token") }
   foreach($k in $Fields.Keys){ $args += @('-F',"$k=$($Fields[$k])") }
   if($FilePath){ $args += @('-F',"resumeFile=@$FilePath;type=text/plain") }

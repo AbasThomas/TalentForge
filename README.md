@@ -175,10 +175,20 @@ Run:
 powershell -ExecutionPolicy Bypass -File scripts/test-endpoints.ps1
 ```
 
+Custom base URL/timeout:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-endpoints.ps1 -BaseUrl http://localhost:8080/api/v1 -CurlMaxTimeSeconds 10
+```
+
 Latest run status (February 14, 2026):
 - `TOTAL=34`
 - `PASSED=34`
 - `FAILED=0`
+
+## Deploy
+
+See deployment guide:
+- `DEPLOY_BACKEND.md`
 
 ## Paystack Setup
 

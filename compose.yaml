@@ -1,4 +1,26 @@
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: talentforge-backend
+    profiles: ["app"]
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/talentforge
+      OLLAMA_BASE_URL: http://ollama:11434
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
   postgres:
     image: postgres:16
     container_name: talentforge-postgres
@@ -10,6 +32,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d talentforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ollama:
     image: ollama/ollama:latest
@@ -20,5 +47,6 @@ services:
       - ollama_data:/root/.ollama
 
 volumes:
+  backend_uploads:
   postgres_data:
   ollama_data:

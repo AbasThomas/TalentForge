@@ -55,6 +55,12 @@ public class OllamaAiAssistantService implements AiAssistantService {
     @Value("${app.ai.max-retries:2}")
     private int aiMaxRetries;
 
+    @Value("${app.ai.bias-timeout-ms:8000}")
+    private long aiBiasTimeoutMs;
+
+    @Value("${app.ai.bias-max-retries:1}")
+    private int aiBiasMaxRetries;
+
     @Value("${app.ai.chat-timeout-ms:6000}")
     private long aiChatTimeoutMs;
 
@@ -86,7 +92,7 @@ public class OllamaAiAssistantService implements AiAssistantService {
                     sanitizeForPrompt(requirements, 3000)
             );
 
-            return callAi(prompt, aiTimeoutMs, aiMaxRetries);
+            return callAi(prompt, aiBiasTimeoutMs, aiBiasMaxRetries);
         } catch (Exception ex) {
             return "Bias check unavailable. Please review language manually for age, gender, and cultural exclusions.";
         }
