@@ -52,7 +52,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Verification code is required");
         }
         otpService.validate(request.email(), request.otp());
-        UserRole requestedRole = request.role() == null ? UserRole.CANDIDATE : request.role();
+        UserRole requestedRole = UserRole.CANDIDATE;
         User existingUser = userRepository.findByEmail(request.email()).orElse(null);
 
         if (existingUser != null) {
@@ -152,6 +152,26 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return buildAuthResponse(user);
+    }
+
+    @Override
+    public AuthResponse becomeRecruiter(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadRequestException("Authenticated user not found"));
+
+        if (user.hasRole(UserRole.RECRUITER)) {
+            throw new BadRequestException("Account already has recruiter access");
+        }
+
+        try {
+            user.addRole(UserRole.RECRUITER);
+        } catch (IllegalStateException ex) {
+            throw new BadRequestException("Account already has the maximum number of roles");
+        }
+
+        User saved = userRepository.save(user);
+        ensureFreeSubscription(saved);
+        return buildAuthResponse(saved);
     }
 
     private AuthResponse buildAuthResponse(User user) {

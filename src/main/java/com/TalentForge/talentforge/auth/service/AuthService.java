@@ -16,4 +16,6 @@ public interface AuthService {
     LoginRoleOptionsResponse loginRoles(AuthRequest request);
 
     AuthResponse switchRole(String email, UserRole role);
+
+    AuthResponse becomeRecruiter(String email);
 }

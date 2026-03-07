@@ -68,6 +68,16 @@ public class AuthController {
         return loginRoles(request);
     }
 
+    @PostMapping("/become-recruiter")
+    public ResponseEntity<ApiResponse<AuthResponse>> becomeRecruiter(Authentication authentication) {
+        AuthResponse response = authService.becomeRecruiter(authentication.getName());
+        return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
+                .success(true)
+                .message("Recruiter access granted")
+                .data(response)
+                .build());
+    }
+
     @PostMapping("/switch-role")
     public ResponseEntity<ApiResponse<AuthResponse>> switchRole(
             Authentication authentication,
