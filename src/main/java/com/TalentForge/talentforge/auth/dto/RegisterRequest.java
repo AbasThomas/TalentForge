@@ -10,6 +10,7 @@ public record RegisterRequest(
         @NotBlank String fullName,
         UserRole role,
         String company,
-        String phone
+        String phone,
+        String otp
 ) {
 }

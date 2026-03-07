@@ -3,6 +3,7 @@ package com.TalentForge.talentforge.auth.controller;
 import com.TalentForge.talentforge.auth.dto.AuthRequest;
 import com.TalentForge.talentforge.auth.dto.AuthResponse;
 import com.TalentForge.talentforge.auth.dto.LoginRoleOptionsResponse;
+import com.TalentForge.talentforge.auth.dto.OtpRequest;
 import com.TalentForge.talentforge.auth.dto.RegisterRequest;
 import com.TalentForge.talentforge.auth.dto.RoleSelectionRequest;
 import com.TalentForge.talentforge.auth.service.AuthService;
@@ -22,6 +23,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+
+    @PostMapping("/otp/send")
+    public ResponseEntity<ApiResponse<Void>> sendOtp(@Valid @RequestBody OtpRequest request) {
+        authService.sendOtp(request.email());
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
+                .message("Verification code sent")
+                .build());
+    }
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
@@ -51,6 +61,11 @@ public class AuthController {
                 .message("Available roles fetched")
                 .data(response)
                 .build());
+    }
+
+    @PostMapping("/login/initiate")
+    public ResponseEntity<ApiResponse<LoginRoleOptionsResponse>> loginInitiate(@Valid @RequestBody AuthRequest request) {
+        return loginRoles(request);
     }
 
     @PostMapping("/switch-role")

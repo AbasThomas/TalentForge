@@ -7,6 +7,8 @@ import com.TalentForge.talentforge.auth.dto.RegisterRequest;
 import com.TalentForge.talentforge.user.entity.UserRole;
 
 public interface AuthService {
+    void sendOtp(String email);
+
     AuthResponse register(RegisterRequest request);
 
     AuthResponse login(AuthRequest request);

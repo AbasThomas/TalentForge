@@ -37,9 +37,21 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final UserMapper userMapper;
+    private final OtpService otpService;
+    private final EmailService emailService;
+
+    @Override
+    public void sendOtp(String email) {
+        String otp = otpService.generate(email);
+        emailService.sendOtp(email, otp);
+    }
 
     @Override
     public AuthResponse register(RegisterRequest request) {
+        if (request.otp() == null || request.otp().isBlank()) {
+            throw new BadRequestException("Verification code is required");
+        }
+        otpService.validate(request.email(), request.otp());
         UserRole requestedRole = request.role() == null ? UserRole.CANDIDATE : request.role();
         User existingUser = userRepository.findByEmail(request.email()).orElse(null);
 
@@ -88,7 +100,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(AuthRequest request) {
+        if (request.otp() == null || request.otp().isBlank()) {
+            throw new BadRequestException("Verification code is required");
+        }
         authenticateCredentials(request.email(), request.password());
+        otpService.validate(request.email(), request.otp());
 
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new BadRequestException("Invalid login credentials"));
@@ -109,6 +125,10 @@ public class AuthServiceImpl implements AuthService {
 
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new BadRequestException("Invalid login credentials"));
+
+        // Send OTP after successful credential validation
+        String otp = otpService.generate(request.email());
+        emailService.sendOtp(request.email(), otp);
 
         return new LoginRoleOptionsResponse(user.getAvailableRoles());
     }
