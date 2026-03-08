@@ -70,7 +70,7 @@ public class OllamaAiAssistantService implements AiAssistantService {
     @Value("${app.ai.failure-cooldown-ms:45000}")
     private long aiFailureCooldownMs;
 
-    @Value("${spring.ai.ollama.chat.options.model:llama3.2:latest}")
+    @Value("${spring.ai.openai.chat.options.model:llama-3.3-70b-versatile}")
     private String configuredModel;
 
     @Override
