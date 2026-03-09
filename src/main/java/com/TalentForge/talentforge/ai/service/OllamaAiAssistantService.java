@@ -147,22 +147,103 @@ public class OllamaAiAssistantService implements AiAssistantService {
         }
     }
 
+    private static final String CHAT_SYSTEM_PROMPT = """
+            You are TalentForge AI — an expert career and recruitment advisor built into the TalentForge hiring platform.
+
+            PLATFORM CONTEXT:
+            TalentForge is an AI-powered hiring platform with two user types:
+            • Recruiters — post jobs, review AI-scored applications, schedule interviews, add private notes, manage their candidate pipeline, view subscriptions and invoices.
+            • Candidates — browse open jobs, submit applications with resume upload, track application status, view scheduled interviews, manage their profile and resume.
+
+            KEY FEATURES:
+            • AI resume scoring (0–100) with matched skill keywords and reasoning
+            • Job bias checking for inclusive, fair job descriptions
+            • Real-time notifications via WebSocket
+            • Paystack-powered subscriptions (FREE / STARTER / PRO / ENTERPRISE)
+            • AI chat assistant (that's you)
+
+            PLATFORM NAVIGATION:
+            Recruiter actions:
+              - Post a job → Recruiter > Jobs > New Job
+              - View/filter applicants → Recruiter > Applications
+              - Open candidate analysis → Recruiter > Applications > [candidate name]
+              - Schedule interview → Recruiter > Applications > [candidate] > Schedule Interview
+              - Add private notes → Recruiter > Applications > [candidate] > Recruiter Notes
+              - Browse all candidates → Recruiter > Candidates
+              - Edit a job → Recruiter > Jobs > [job title] > Edit Job
+              - Manage billing → Recruiter > Subscription
+
+            Candidate actions:
+              - Browse open jobs → Candidate > Jobs
+              - Apply to a job → Candidate > Jobs > [job title] > Apply
+              - Track applications → Candidate > Applications
+              - View interview schedule → Candidate > Applications > [application] > Interviews
+              - Edit profile & skills → Candidate > Profile
+              - Manage billing → Candidate > Subscription
+
+            YOUR PERSONALITY AND STYLE:
+            • Be warm, direct, and genuinely helpful — never robotic or evasive
+            • For step-by-step instructions: use numbered steps
+            • For lists of options or tips: use bullet points (•)
+            • Use **bold** for action labels, key terms, navigation paths, and important warnings
+            • For short conversational questions: reply in 1–3 sentences, no bullets needed
+            • For detailed how-to questions: give complete, structured answers
+            • Always end with a follow-up offer if the topic is complex (e.g. "Want tips on writing the requirements section too?")
+            • Never say "I cannot help with that" — always provide value or guide the user toward a useful action
+            • If a question is outside HR/recruitment/TalentForge, briefly answer it and bring it back to how it relates to hiring or career growth
+
+            EXPERTISE AREAS:
+            • Resume writing, formatting, and ATS optimization
+            • Interview preparation (behavioural, technical, situational questions)
+            • Job description writing and inclusive hiring practices
+            • Candidate pipeline management and hiring workflows
+            • Salary benchmarking and negotiation advice
+            • Career growth, role transitions, and skill development
+            • Recruiter productivity and sourcing strategies
+            """;
+
     @Override
     public String generateChatReply(String message) {
-        String prompt = """
-                You are Talentforge assistant for candidates and recruiters.
-                Keep answers practical and concise.
-                User message: %s
-                """.formatted(sanitizeForPrompt(message, 3000));
-
-        try {
-            return callAi(prompt, aiChatTimeoutMs, aiChatMaxRetries);
-        } catch (Exception ex) {
-            throw new AiServiceUnavailableException(
-                    "AI service unavailable. Verify Ollama is running and the configured model is loaded.",
-                    ex
-            );
+        String userMessage = sanitizeForPrompt(message, 3000);
+        long cooldownUntil = aiCooldownUntilEpochMs.get();
+        if (cooldownUntil > System.currentTimeMillis()) {
+            throw new AiServiceUnavailableException("AI temporarily cooling down after recent failures.", null);
         }
+
+        int attempts = Math.max(1, aiChatMaxRetries);
+        Exception lastFailure = null;
+
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            CompletableFuture<String> future = CompletableFuture.supplyAsync(() ->
+                    chatClientBuilder.build()
+                            .prompt()
+                            .system(CHAT_SYSTEM_PROMPT)
+                            .user(userMessage)
+                            .call()
+                            .content(),
+                    aiExecutor
+            );
+            try {
+                String response = future.get(aiChatTimeoutMs, TimeUnit.MILLISECONDS);
+                if (response != null && !response.isBlank()) {
+                    aiCooldownUntilEpochMs.set(0);
+                    return response.trim();
+                }
+                throw new RuntimeException("AI returned an empty response");
+            } catch (TimeoutException ex) {
+                future.cancel(true);
+                lastFailure = new RuntimeException("AI chat timed out on attempt " + attempt, ex);
+            } catch (Exception ex) {
+                future.cancel(true);
+                lastFailure = new RuntimeException("AI chat failed on attempt " + attempt, ex);
+            }
+        }
+
+        aiCooldownUntilEpochMs.set(System.currentTimeMillis() + Math.max(1000L, aiFailureCooldownMs));
+        throw new AiServiceUnavailableException(
+                "AI service unavailable. Check your Groq API key and model configuration.",
+                lastFailure
+        );
     }
 
     private String callAi(String prompt, long timeoutMs, int maxRetries) {

@@ -2,6 +2,7 @@ package com.TalentForge.talentforge.auth.service;
 
 import com.TalentForge.talentforge.auth.dto.AuthRequest;
 import com.TalentForge.talentforge.auth.dto.AuthResponse;
+import com.TalentForge.talentforge.auth.dto.BecomeRecruiterRequest;
 import com.TalentForge.talentforge.auth.dto.LoginRoleOptionsResponse;
 import com.TalentForge.talentforge.auth.dto.RegisterRequest;
 import com.TalentForge.talentforge.user.entity.UserRole;
@@ -17,5 +18,5 @@ public interface AuthService {
 
     AuthResponse switchRole(String email, UserRole role);
 
-    AuthResponse becomeRecruiter(String email);
+    AuthResponse becomeRecruiter(String email, BecomeRecruiterRequest request);
 }

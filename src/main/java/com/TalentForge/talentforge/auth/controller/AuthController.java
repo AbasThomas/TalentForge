@@ -2,6 +2,7 @@ package com.TalentForge.talentforge.auth.controller;
 
 import com.TalentForge.talentforge.auth.dto.AuthRequest;
 import com.TalentForge.talentforge.auth.dto.AuthResponse;
+import com.TalentForge.talentforge.auth.dto.BecomeRecruiterRequest;
 import com.TalentForge.talentforge.auth.dto.LoginRoleOptionsResponse;
 import com.TalentForge.talentforge.auth.dto.OtpRequest;
 import com.TalentForge.talentforge.auth.dto.RegisterRequest;
@@ -69,8 +70,11 @@ public class AuthController {
     }
 
     @PostMapping("/become-recruiter")
-    public ResponseEntity<ApiResponse<AuthResponse>> becomeRecruiter(Authentication authentication) {
-        AuthResponse response = authService.becomeRecruiter(authentication.getName());
+    public ResponseEntity<ApiResponse<AuthResponse>> becomeRecruiter(
+            Authentication authentication,
+            @Valid @RequestBody BecomeRecruiterRequest request
+    ) {
+        AuthResponse response = authService.becomeRecruiter(authentication.getName(), request);
         return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
                 .success(true)
                 .message("Recruiter access granted")

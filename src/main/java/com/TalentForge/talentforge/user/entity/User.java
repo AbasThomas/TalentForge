@@ -60,6 +60,24 @@ public class User {
 
     private String phone;
 
+    @Column(name = "company_website")
+    private String companyWebsite;
+
+    @Column(name = "recruiter_job_title")
+    private String recruiterJobTitle;
+
+    @Column(name = "recruiter_team_size")
+    private String recruiterTeamSize;
+
+    @Column(name = "recruiter_terms_accepted_at")
+    private LocalDateTime recruiterTermsAcceptedAt;
+
+    @Column(name = "recruiter_data_consent_accepted_at")
+    private LocalDateTime recruiterDataConsentAcceptedAt;
+
+    @Column(name = "recruiter_authority_confirmed_at")
+    private LocalDateTime recruiterAuthorityConfirmedAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

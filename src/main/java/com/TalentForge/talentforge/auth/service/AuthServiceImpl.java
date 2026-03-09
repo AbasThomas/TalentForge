@@ -2,6 +2,7 @@ package com.TalentForge.talentforge.auth.service;
 
 import com.TalentForge.talentforge.auth.dto.AuthRequest;
 import com.TalentForge.talentforge.auth.dto.AuthResponse;
+import com.TalentForge.talentforge.auth.dto.BecomeRecruiterRequest;
 import com.TalentForge.talentforge.auth.dto.LoginRoleOptionsResponse;
 import com.TalentForge.talentforge.auth.dto.RegisterRequest;
 import com.TalentForge.talentforge.common.exception.BadRequestException;
@@ -155,13 +156,24 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public AuthResponse becomeRecruiter(String email) {
+    public AuthResponse becomeRecruiter(String email, BecomeRecruiterRequest request) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadRequestException("Authenticated user not found"));
 
         if (user.hasRole(UserRole.RECRUITER)) {
             throw new BadRequestException("Account already has recruiter access");
         }
+
+        user.setCompany(request.company().trim());
+        user.setPhone(request.phone().trim());
+        user.setCompanyWebsite(request.companyWebsite().trim());
+        user.setRecruiterJobTitle(request.recruiterJobTitle().trim());
+        user.setRecruiterTeamSize(request.recruiterTeamSize().trim());
+
+        LocalDateTime now = LocalDateTime.now();
+        user.setRecruiterTermsAcceptedAt(now);
+        user.setRecruiterDataConsentAcceptedAt(now);
+        user.setRecruiterAuthorityConfirmedAt(now);
 
         try {
             user.addRole(UserRole.RECRUITER);
