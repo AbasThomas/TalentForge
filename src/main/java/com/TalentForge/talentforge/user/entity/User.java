@@ -78,6 +78,9 @@ public class User {
     @Column(name = "recruiter_authority_confirmed_at")
     private LocalDateTime recruiterAuthorityConfirmedAt;
 
+    @Column(name = "profile_picture", length = 1000)
+    private String profilePicture;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

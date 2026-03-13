@@ -25,6 +25,7 @@ public class UserMapper {
                 user.getRecruiterAuthorityConfirmedAt(),
                 user.isActive(),
                 user.isVerified(),
+                user.getProfilePicture(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );

@@ -22,6 +22,7 @@ public record UserResponse(
         LocalDateTime recruiterAuthorityConfirmedAt,
         boolean active,
         boolean verified,
+        String profilePicture,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

@@ -166,6 +166,7 @@ public class UserServiceImpl implements UserService {
         user.setFullName(request.fullName().trim());
         user.setCompany(request.company() == null || request.company().isBlank() ? null : request.company().trim());
         user.setPhone(request.phone() == null || request.phone().isBlank() ? null : request.phone().trim());
+        user.setProfilePicture(request.profilePicture() == null || request.profilePicture().isBlank() ? null : request.profilePicture().trim());
 
         return userMapper.toResponse(userRepository.save(user));
     }
